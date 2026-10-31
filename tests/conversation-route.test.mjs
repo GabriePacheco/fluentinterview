@@ -9,7 +9,7 @@ test('Route length, scaffolding, priorities and questions derive from level and 
  const a=buildConversationRoute(assessment('A1')),b=buildConversationRoute(assessment('B2'));
  assert.equal(steps(a).length,22);assert.equal(steps(b).length,10);assert.notEqual(steps(a)[0].task,steps(b)[0].task);assert.equal(steps(a)[0].targetAnswers,3);
  const sameLevel=buildConversationRoute(assessment('A1','Backend developer','technical_clarity'));
- assert.notEqual(a.stages[0].title,sameLevel.stages[0].title);assert.notEqual(steps(a)[0].question,steps(sameLevel)[0].question);assert.match(steps(sameLevel)[0].objective,/Backend developer/);
+ assert.notDeepEqual(a.stages.map(s=>s.title),sameLevel.stages.map(s=>s.title));assert.notEqual(steps(a)[0].question,steps(sameLevel)[0].question);assert.match(steps(sameLevel)[0].objective,/Backend developer/);
 });
 test('Exact 9 advances; near 9 fails, retries vary, reopening is idempotent and approvals survive later failure/deletion',async()=>{
  const f=await routeFixture(),{routes,record,sessions,storage}=f;let route=(await routes.state('alice')).route;const first=steps(route)[0],second=steps(route)[1];

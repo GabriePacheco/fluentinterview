@@ -1,25 +1,19 @@
 import {fail} from './http.mjs';
 import {scoreReview} from './review-model.mjs';
+import {professionalModules,competencySteps} from './interview-competencies.mjs';
 const UUID=/^[a-f0-9-]{36}$/i;
 const LEVELS={A1:{count:6,answers:3,language:'Use short, concrete questions and simple everyday English; ask for one fact at a time.'},A2:{count:5,answers:3,language:'Use simple linked sentences; ask about a familiar task, an action and a result.'},B1:{count:4,answers:4,language:'Ask for a connected account with reasons and a concrete example.'},B2:{count:3,answers:4,language:'Ask for a developed professional explanation, alternatives and follow-up clarification.'},C1:{count:3,answers:5,language:'Ask for precise, nuanced explanations and defensible trade-offs suited to the target role.'}};
-const TASKS=[
- {title:'Una idea clara',task:'Describe one relevant fact about your own work or studies.',criterion:'Responder con una idea propia, pertinente y comprensible.'},
- {title:'Añade un detalle',task:'Explain a familiar task using one specific detail from your experience.',criterion:'Explicar una tarea propia con un detalle concreto.'},
- {title:'Cuenta tu acción',task:'Describe what you personally did in one real situation and what happened.',criterion:'Distinguir la acción propia y explicar qué ocurrió.'},
- {title:'Explica tus razones',task:'Explain a decision and why it made sense in that situation.',criterion:'Conectar una decisión con una razón y un ejemplo pertinente.'},
- {title:'Responde una repregunta',task:'Answer a new follow-up that asks you to clarify or adapt the example.',criterion:'Responder la repregunta sin perder claridad ni contradecir el ejemplo.'},
- {title:'Llévalo a otra situación',task:'Apply the objective to a different interview situation; compare an alternative when appropriate to your level.',criterion:'Usar lo practicado en un ejemplo nuevo, con razones adecuadas a la pregunta.'}
-];
-const FOCUS={grammar:'Habla de tu experiencia con claridad',vocabulary:'Elige palabras precisas para tu puesto',cohesion:'Ordena tus respuestas',evidence:'Demuestra tu aportación',concision:'Da respuestas concretas',reasoning:'Explica tus decisiones',technical_clarity:'Explica tu trabajo a un reclutador',listening_details:'Aclara lo que te pregunta el reclutador',reading_details:'Conversa sobre una situación de trabajo'};
 export function buildConversationRoute(assessment){
  const level=LEVELS[assessment.result.level];if(!level)throw fail('Necesitas un diagnóstico con evidencia suficiente para crear tu ruta.',409);
  let order=0;
- const stages=assessment.result.modules.map((m,index)=>{
+ const modules=professionalModules(assessment.result.modules);
+ const stages=modules.map((m,index)=>{
   const count=Math.max(2,level.count-(m.orientation==='transfer'?1:0));
-  const tasks=assessment.result.level==='A1'?TASKS.slice(0,count):assessment.result.level==='A2'?TASKS.slice(1,1+count):TASKS.slice(6-count);
-  return {id:'stage'+index,moduleIndex:index,title:FOCUS[m.focus]||m.title,reason:m.reason,evidence:m.evidenceQuote,focus:m.focus||'evidence',steps:tasks.map((task,i)=>({id:`m${index}s${i}`,order:order++,title:task.title,objective:`${m.objective.slice(0,230)} ${task.criterion}`,criterion:task.criterion,task:task.task,question:m.conversation.slice(0,500),evidence:m.evidenceQuote.slice(0,300),targetAnswers:level.answers,attempts:[],passedAt:null}))};
+  const tasks=competencySteps(m.focus,count),previousCapabilities=modules.slice(0,index).map(x=>x.title);
+  const role=assessment.profile?.role?.slice(0,120)||'tu puesto objetivo';
+  return {id:'stage'+index,moduleIndex:m.moduleIndex,title:m.title,objective:m.objective,orientation:m.orientation,reason:m.reason,evidence:m.evidenceQuote,focus:m.focus,adaptedFrom:m.adaptedFrom,previousCapabilities,steps:tasks.map((task,i)=>({id:`m${m.moduleIndex}s${i}`,order:order++,title:task.title,objective:`${task.criterion} Puesto: ${role}.`,criterion:i===tasks.length-1?m.masteryCheck:task.criterion,task:task.task,question:m.conversation.slice(0,500),evidence:m.evidenceQuote.slice(0,300),targetAnswers:level.answers,attempts:[],passedAt:null}))};
  });
- return {revision:1,assessmentId:assessment.id,level:assessment.result.level,profile:assessment.profile,createdAt:Date.now(),stages};
+ return {revision:2,assessmentId:assessment.id,level:assessment.result.level,profile:assessment.profile,createdAt:Date.now(),stages};
 }
 const allSteps=route=>route.stages.flatMap(stage=>stage.steps);
 export const routeAttemptKey=(uid,id)=>`route-attempt:${encodeURIComponent(uid)}:${id}`;
@@ -30,7 +24,7 @@ export class ConversationRouteService{
   const assessment=id?await this.assessments.get(uid,id):(await this.assessments.state(uid)).current;
   if(!assessment)return null;if(assessment.status!=='completed'||assessment.source!=='openai')throw fail('Completa un diagnóstico con IA para crear tu ruta.',409);
   const key=this.assessments.key(uid,assessment.id);
-  return this.storage.transaction(async tx=>{const saved=await tx.get(key);if(!saved)throw fail('Diagnóstico no encontrado.',404);let changed=false;if(!saved.conversationRoute){saved.conversationRoute=buildConversationRoute(saved);changed=true}
+  return this.storage.transaction(async tx=>{const saved=await tx.get(key);if(!saved)throw fail('Diagnóstico no encontrado.',404);let changed=false;if(!saved.conversationRoute||saved.conversationRoute.revision<2&&allSteps(saved.conversationRoute).every(step=>!step.passedAt&&!step.attempts.length)){saved.conversationRoute=buildConversationRoute(saved);changed=true}
    for(const step of allSteps(saved.conversationRoute)){const ids=[];for(const a of step.attempts){if(typeof a==='string')ids.push(a);else{await tx.put(routeAttemptKey(uid,a.id),a);ids.push(a.id);changed=true}}step.attempts=ids}
    if(changed)await tx.put(key,saved);return saved.conversationRoute});
  }
@@ -86,7 +80,8 @@ export class ConversationRouteService{
    const round=stored.attempts.length+1,last=stored.attempts.length?await tx.get(routeAttemptKey(uid,stored.attempts.at(-1))):null;
    const variations=['una experiencia propia distinta','una situación con otra persona del equipo','una explicación para un reclutador que desconoce tu trabajo','una situación con una restricción o necesidad diferente'];
    const previous=last?await tx.get(this.sessions.key(uid,last.id)):null;
-   const context={routeStep:true,routeId:route.assessmentId,stepId:step.id,assessmentId:route.assessmentId,moduleIndex:route.stages.find(s=>s.steps.some(x=>x.id===step.id)).moduleIndex,level:route.level,title:step.title,objective:step.objective,criterion:step.criterion,conversation:step.question,task:step.task,evidence:step.evidence,targetAnswers:step.targetAnswers,language:LEVELS[route.level].language,attempt:round,scenario:variations[(round-1)%variations.length],retryFocus:last?.reason?.slice(0,300)||'',avoidQuestions:previous?.messages.filter(m=>m.role==='assistant').slice(-2).map(m=>m.content.slice(0,120))||[]};
+   const priorCapabilities=route.stages.find(s=>s.steps.some(x=>x.id===step.id)).previousCapabilities||[];
+   const context={routeStep:true,priorCapabilities,routeId:route.assessmentId,stepId:step.id,assessmentId:route.assessmentId,moduleIndex:route.stages.find(s=>s.steps.some(x=>x.id===step.id)).moduleIndex,level:route.level,title:step.title,objective:step.objective,criterion:step.criterion,conversation:step.question,task:step.task,evidence:step.evidence,targetAnswers:step.targetAnswers,language:LEVELS[route.level].language,attempt:round,scenario:variations[(round-1)%variations.length],retryFocus:last?.reason?.slice(0,300)||'',avoidQuestions:previous?.messages.filter(m=>m.role==='assistant').slice(-2).map(m=>m.content.slice(0,120))||[]};
    await tx.put(routeAttemptKey(uid,input.id),{id:input.id,number:round,startedAt:Date.now(),score:null,passed:false,context});stored.attempts.push(input.id);await tx.put(key,a);
   });
   return {session:await this.sessions.create(uid,{id:input.id,source:'openai',mode:'tutor',purpose:'practice',profile:route.profile,routeId:route.assessmentId,stepId:step.id},verified)};

@@ -63,8 +63,8 @@ const bank={
  row('When will the link be sent?',['Today','Tomorrow','Next month'],1,'El enlace se enviará mañana.')
  ]}
 };
-export function moduleFocus(module,index=0){return Object.keys(bank).includes(module.focus)?module.focus:Object.keys(LEARNING_FOCUS).find(k=>LEARNING_FOCUS[k].title===module.title)||['grammar','vocabulary','cohesion','evidence'][index%4]}
-export function foundationModules(){return ['grammar','vocabulary','cohesion','evidence'].map(focus=>({focus,...LEARNING_FOCUS[focus],conversation:'Describe a real task you completed. What did you do and what changed?'}))}
+export function moduleFocus(module,index=0){const focus=Object.hasOwn(LEARNING_FOCUS,module.focus)?module.focus:Object.keys(LEARNING_FOCUS).find(k=>LEARNING_FOCUS[k].title===module.title)||['grammar','vocabulary','cohesion','evidence'][index%4];return LEARNING_FOCUS[focus]?.supportFocus||focus}
+export function foundationModules(){return ['professional_intro','experience_story','justify_decisions','handle_followups'].map(focus=>({focus,...LEARNING_FOCUS[focus],conversation:'Describe a real task you completed. What did you do and what changed?'}))}
 export function buildActivity(module,level,round=0){
  const focus=moduleFocus(module),content=bank[focus],variant=round%2,items=content.items.slice(variant*2,variant*2+2).map((item,i)=>({id:`q${i+1}`,...item}));
  return {revision:STUDY_REVISION,focus,title:module.title,objective:module.objective,explanation:content.explanation,
