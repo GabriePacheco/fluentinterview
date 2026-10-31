@@ -20,4 +20,10 @@ La gramática y el vocabulario quedan como correcciones o ejercicios de apoyo de
 
 Prueba de navegador con API simulada: ruta, bloqueos, reintento, aprobado, historial y visualización en computador/móvil. Capturas revisadas en `qa/personal-route-desktop.png` y `qa/interview-route-mobile.png`. No se realizaron llamadas de pago ni se alteró el transporte de audio, VAD o modelos. La calidad de una selección generada en producción queda pendiente de observar en el siguiente diagnóstico real.
 
-La referencia de publicación se registrará después de verificar el despliegue.
+## Publicación verificada
+
+- Commit del código: `cce7fc8`.
+- Worker: `a0bbaf1e-6488-4cbd-a822-bbdc0ca45e07`.
+- Firebase: canal `day1`, https://fuentinterview--day1-0vs64ic5.web.app/#/ruta.
+- `public/conversation-route.js` servido por Firebase coincide por SHA256 con el archivo desplegado.
+- Etiqueta del código publicado: `release-2026-10-31-1`. Git permanece local, sin remotos.
