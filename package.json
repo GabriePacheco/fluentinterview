@@ -1,0 +1,38 @@
+{
+  "name": "fluent-interview-local",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/index.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:rules": "node --test tests/firestore.rules.mjs",
+    "test:browser": "node tests/browser.mjs",
+    "test:voice": "node tests/day2-browser.mjs",
+    "test:diagnostic": "node tests/day3-browser.mjs",
+    "deploy:preview": "firebase hosting:channel:deploy day1 --expires 7d --project fuentinterview",
+    "deploy:rules": "firebase deploy --only firestore:rules --project fuentinterview",
+    "deploy:api": "wrangler deploy",
+    "test:school": "node tests/day4-browser.mjs",
+    "test:commerce": "node tests/day5-browser.mjs",
+    "test:pilot": "node tests/day6-browser.mjs"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.6",
+    "undici": "7.30.1"
+  },
+  "dependencies": {
+    "firebase": "^13.0.0",
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "esbuild": "^0.28.2",
+    "wrangler": "^4.151.1",
+    "miniflare": "5.20261012.1-beta"
+  }
+}

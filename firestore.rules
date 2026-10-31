@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner(uid) { return request.auth != null && request.auth.uid == uid; }
+    function validProfile() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['name','role','goal','minutes','experience','job','createdAt','updatedAt','schemaVersion'])
+        && d.keys().hasOnly(['name','role','goal','minutes','experience','job','createdAt','updatedAt','schemaVersion'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 60
+        && d.role is string && d.role.size() <= 100
+        && d.goal is string && d.goal.size() <= 200
+        && d.minutes in ['10 minutos','20 minutos','30 minutos']
+        && d.experience is string && d.experience.size() <= 3000
+        && d.job is string && d.job.size() <= 6000
+        && d.schemaVersion == 1
+        && d.createdAt is timestamp && d.updatedAt == request.time;
+    }
+    match /fi_users/{uid} {
+      allow get: if owner(uid);
+      allow list: if false;
+      allow create: if owner(uid) && validProfile() && request.resource.data.createdAt == request.time;
+      allow update: if owner(uid) && validProfile() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if owner(uid);
+      // Learning evidence and commercial access are server-owned. Client writes
+      // remain closed until the corresponding features have been implemented.
+      match /{collection}/{id} {
+        allow read: if owner(uid) && collection in ['assessments','routes','sessions','progress'];
+        allow write: if false;
+      }
+    }
+    match /fi_entitlements/{uid} {
+      allow get: if owner(uid);
+      allow list, write: if false;
+    }
+    // No client access to billing, budgets, roles or legacy collections.
+    match /{document=**} { allow read, write: if false; }
+  }
+}

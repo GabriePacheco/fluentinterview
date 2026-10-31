@@ -1,0 +1,4 @@
+export const FINISH_CONVERSATION_TOOL={type:'function',name:'finish_conversation',description:'End this interview or tutor practice when it is complete or the candidate asks to finish. The application will request a short spoken farewell before closing.',parameters:{type:'object',properties:{},required:[],additionalProperties:false}};
+export function farewellText(session){return session.purpose==='diagnostic'?'Thank you for sharing your experience. Your interview feedback is coming next. Goodbye.':session.mode==='interview'?'Thank you for your time. This concludes our interview. Goodbye.':'Thank you for practicing today. Your feedback is coming next. See you next time.'}
+// Match only a terminal assistant farewell, never a candidate turn or quoted example.
+export function isTerminalFarewell(text){return /(?:^|[.!?]\s+)(?:goodbye(?:, [\p{L} -]{1,60})?|see you next time|(?:that|this) concludes (?:our|the) interview)[.!]?\s*$/iu.test(text||'')}

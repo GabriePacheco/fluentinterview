@@ -1,0 +1,5 @@
+#!/bin/sh
+# Inspect the index, not unstaged working files. No network or paid tests.
+node_bin=$(git config --get fluent.nodePath || true)
+if [ -z "$node_bin" ]; then node_bin=node; fi
+exec "$node_bin" scripts/check-staged.mjs

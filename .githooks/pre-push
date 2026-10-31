@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "Este repositorio es solo local. No se permite publicar con git push." >&2
+exit 1

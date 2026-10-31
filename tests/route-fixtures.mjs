@@ -1,0 +1,13 @@
+import {SessionService} from '../server/sessions.mjs';import {AssessmentService} from '../server/assessments.mjs';import {ConversationRouteService} from '../server/conversation-route.mjs';
+export function memory(){const values=new Map();let serial=Promise.resolve();const s={get:async k=>structuredClone(values.get(k)),put:async(k,v)=>values.set(k,structuredClone(v)),delete:async k=>values.delete(k),transaction(fn){const task=serial.then(()=>fn(s));serial=task.catch(()=>{});return task}};return s}
+export function assessment(level='A2',role='Customer support',focus='evidence'){return {id:crypto.randomUUID(),status:'completed',source:'openai',version:1,profile:{role,goal:'Preparar mi entrevista',minutes:'20 minutos'},result:{level,modules:[focus,'cohesion','concision','reasoning'].map((f,i)=>({focus:f,title:'Objetivo '+i,orientation:i%2?'transfer':'reinforce',objective:`Explicar una experiencia de ${role} con un ejemplo propio.`,reason:`Tu respuesta sobre ${role} necesita una acción concreta.`,evidenceQuote:`I work in ${role} and help people solve problems.`,conversation:`Tell me about a problem you solved in ${role}.`,masteryCheck:'Explicar una acción y un resultado.'}))}}}
+export async function routeFixture(record=assessment()){
+ const storage=memory(),assessments=new AssessmentService(storage,{budget:async()=>({})}),sessions=new SessionService(storage,{source:'openai',budget:async()=>({}),run:async()=>{throw Error('No AI calls')}}),routes=new ConversationRouteService(storage,{assessments,sessions});sessions.learning=(uid,input)=>input.routeId?routes.context(uid,input):null;
+ await storage.put(assessments.key('alice',record.id),record);await storage.put(assessments.index('alice'),{ids:[record.id],current:record.id});return {storage,assessments,sessions,routes,record};
+}
+export const ratings=n=>Object.fromEntries(['relevance','structure','evidence','english'].map(k=>[k,{points:n,reason:'Añade una acción propia y explica su resultado.'}]));
+export async function finishAttempt(fixture,session,n=9,{count=session.learning.targetAnswers,transport='realtime',source='openai'}={}){
+ const messages=Array.from({length:count},(_,i)=>[{id:'a'+i,role:'assistant',content:'What did you do in situation '+i+'?'},{id:'u'+i,role:'user',content:'I helped a customer understand the available options and solve a problem.'}]).flat();
+ await fixture.storage.put(fixture.sessions.key('alice',session.id),{...session,status:'completed',transport,messages});
+ await fixture.storage.put(`feedback:alice:session:${session.id}`,{status:'completed',source,result:{ratings:typeof n==='number'?ratings(n):n,scoring:{score:10,passed:true},nextStep:'Explica tu contribución con otro ejemplo.'}});
+}
