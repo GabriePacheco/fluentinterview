@@ -20,7 +20,7 @@ export function realtimeConfig(session){
  if(session.mode!=='interview'&&session.purpose!=='diagnostic')instructions+=` TUTOR LANGUAGE POLICY: English is the default for the conversation, greetings, questions, examples and follow-ups. Only the brief correction/explanation may be in Spanish, and only if the candidate demonstrates very low English or that particular explanation is too complex to understand in English. Then immediately return to an English example and English question. Never translate or paraphrase the candidate's English into Spanish. Do not switch the whole conversation to Spanish. The saved level is a starting hint: the latest independent answers override it. Simplify questions when needed, without assuming low ability from a pause or asking to repeat. Keep replies under 35 words; one point at a time. Do not infer advanced ability from a job title or copied example. Do not announce a new CEFR level. Avoid instructions such as "give an independent new answer"; ask a natural follow-up about their experience.`;
  else instructions+=` Simplify the next English question when the actual answer shows difficulty, regardless of the saved level or job title. No coaching during simulated interviews. A request to repeat is not evidence of low ability.`;
  instructions+=' Never guess or anglicize a candidate name. The profile name is a spelling hint, not proof of what was said. If uncertain, ask briefly how to spell it; until confirmed, address the candidate as you. Listen to the whole answer, including continuations after pauses. Never complete an unfinished answer on their behalf.';
- if(session.purpose==='diagnostic')instructions+=' Conduct a realistic, welcoming first-round JOB INTERVIEW for the target role. Explain briefly that you will ask about their work and experience. Do not present an English exam, vocabulary quiz or school exercise. Keep each question tied to the candidate and the job; simplify its English when necessary.';
+ if(session.purpose==='diagnostic')instructions+=' Conduct a realistic, welcoming first-round JOB INTERVIEW for the target role. Explain briefly that you will ask about their work and experience. Do not present an English exam, vocabulary quiz or school exercise. Keep each question tied to the candidate and the job; simplify its English when necessary. After asking a question, stop and wait for the candidate answer. Never attach a goodbye or closing statement to a question. Only the server farewell instruction may end the diagnostic.';
  else instructions+=' When the interview or practice is complete, or the candidate wants to finish, call finish_conversation. The application will then ask you to say a short farewell. Do not keep asking questions after saying goodbye. In interview mode cover introduction, motivation for the role, a relevant example and a follow-up before offering a final opportunity for candidate questions; do not continue indefinitely.';
  instructions+=practiceGoalPrompt(session.practiceGoal);
  if(session.mode!=='interview'&&session.purpose!=='diagnostic')instructions+=TUTOR_CORRECTION_STYLE;
@@ -49,7 +49,7 @@ export class RealtimeRelay{
  start(){
   this.timer=setTimeout(()=>this.close('Terminó el tiempo de esta sesión. Tu conversación está guardada; puedes iniciar otra.'),this.policy.seconds*1000);
   this.warningTimer=setTimeout(()=>this.client({type:'fluent.notice',message:'Queda un minuto en esta sesión. Al terminar podrás iniciar otra conversación.'}),Math.max(0,this.policy.seconds-60)*1000);
-  this.farewellTimer=setTimeout(()=>this.beginFarewell('Conversación terminada. Estamos preparando tu evaluación.'),Math.max(0,this.policy.seconds-15)*1000);
+  this.farewellTimer=setTimeout(()=>this.scheduleFarewell(),Math.max(0,this.policy.seconds-(this.session.diagnostic?45:15))*1000);
   this.upstream.addEventListener('message',e=>{try{this.event(JSON.parse(e.data))}catch{this.close('La conexión de voz se interrumpió.')}});
   this.downstream.addEventListener('message',e=>{try{this.input(JSON.parse(e.data))}catch{this.close('No pudimos continuar con el audio.')}});
   for(const socket of [this.upstream,this.downstream]){socket.addEventListener('close',()=>this.close('Se cerró la conexión de voz. Tu conversación recibida está guardada.'));socket.addEventListener('error',()=>this.close('Se perdió la conexión de voz.'));}
@@ -69,6 +69,12 @@ export class RealtimeRelay{
  }
  flush(){const messages=this.snapshot(),diagnostic=this.session.diagnostic?structuredClone(this.session.diagnostic):undefined;this.persist=this.persist.catch(()=>{}).then(()=>this.save(messages,diagnostic));this.persist.catch(()=>this.close('No pudimos guardar la conversación.'));return this.persist}
  finishStep(){if(this.routeEnding&&!this.active&&!this.pendingResponse&&!this.speaking&&!this.paused&&!this.closing)this.beginFarewell('Paso terminado. Estamos revisando tu conversación para actualizar tu ruta.')}
+ scheduleFarewell(){
+  // The soft deadline must not turn a question already asked into a goodbye.
+  // Keep the existing hard session limit; finish after the pending answer.
+  if(this.session.diagnostic&&this.awaitingDiagnosticAnswer){this.timeEndingRequested=true;return}
+  this.beginFarewell('Conversación terminada. Estamos preparando tu evaluación.');
+ }
  beginFarewell(message='Conversación terminada. Estamos preparando tu evaluación.'){
   if(this.closed||this.closing||this.ending)return;
   if(!this.ready){this.close(message,true);return}
@@ -98,12 +104,13 @@ export class RealtimeRelay{
    // not delay the next question; finalization still waits for its saved text.
    if(this.session.diagnostic&&this.audioPending.size&&!this.ending)return;
    if(this.ending?.requested)return;
-   if(this.session.practiceGoal&&!this.ending){
+   const goal=this.session.practiceGoal||(this.session.learning?.routeStep?this.session.learning:null);
+   if(goal&&!this.ending){
     const turns=this.order.map(id=>({...this.items.get(id),interrupted:this.truncated.has(id)}));
-    if(countPracticeAnswers(turns,{committed:true})>=this.session.practiceGoal.targetAnswers){
+    if(countPracticeAnswers(turns,{committed:true})>=goal.targetAnswers){
      this.practiceWaiting=true;
      if(turns.some(m=>m.role==='user'&&!this.transcribed.has(m.id)))return;
-     this.practiceWaiting=false;this.beginFarewell('Práctica terminada. Estamos evaluando tu objetivo.');return;
+     this.practiceWaiting=false;this.beginFarewell(this.session.learning?.routeStep?'Paso terminado. Estamos revisando tu conversación para actualizar tu ruta.':'Práctica terminada. Estamos evaluando tu objetivo.');return;
     }
    }
    if(this.session.diagnostic&&!this.ending){
@@ -119,6 +126,7 @@ export class RealtimeRelay{
     this.provider({type:'response.create',response:{tools:[],tool_choice:'none',instructions:'The conversation has ended. Say ONLY this brief farewell in English, naturally, with no question, score, correction or additional content: '+farewellText(this.session)}});
    }else if(this.session.diagnostic){
     const state=this.session.diagnostic,ids=this.order.filter(id=>this.items.get(id).role==='user'&&!state.steps.some(s=>(s.itemIds||[s.itemId]).includes(id))),latest=ids.at(-1),assess=!!latest;
+    if(!assess)this.awaitingDiagnosticAnswer=true;
     this.diagnosticRequest={itemId:latest,itemIds:ids,revision:this.inputRevision,assess};
     const question=this.order.findLast(id=>this.items.get(id).role==='assistant'&&!this.truncated.has(id));
     this.provider({type:'response.create',response:{...(assess?{conversation:'none',output_modalities:['text'],input:[...(question?[question]:[]),...ids].map(id=>({type:'item_reference',id}))}:{}),tool_choice:assess?{type:'function',name:'diagnostic_step'}:'none',instructions:assess?DIAGNOSTIC_DECISION_PROMPT:realtimeConfig(this.session).session.instructions+'\nAsk the next question only: '+diagnosticQuestion(state)}});
@@ -174,18 +182,19 @@ export class RealtimeRelay{
       const before=this.session.diagnostic;
       const decision=this.diagnosticResponse.itemIds.some(id=>this.transcriptionFailed.has(id))?{outcome:'unclear',reason:'No se recibió la transcripción completa; solicita repetir sin calificar.'}:JSON.parse(calls[0].arguments);
       this.session.diagnostic=advanceDiagnostic(before,target,decision);
+      this.awaitingDiagnosticAnswer=false;
       this.decisionRollback={state:before,responseId:null};
       this.session.diagnostic.steps.at(-1).itemIds=this.diagnosticResponse.itemIds;
       this.flush();
       this.client({type:'fluent.diagnostic',stage:this.session.diagnostic.stage,answers:this.session.diagnostic.steps.length});
-      if(this.session.diagnostic.finished){this.beginFarewell('Diagnóstico finalizado. Estamos preparando tu evaluación y tu ruta.');return}
+      if(this.session.diagnostic.finished||this.timeEndingRequested){this.beginFarewell('Diagnóstico finalizado. Estamos preparando tu evaluación y tu ruta.');return}
       this.wantResponse=true;
      }catch{this.close('No pudimos confirmar el siguiente paso del diagnóstico. Tus respuestas se conservan.');return}
     }else if(!this.speaking&&!this.closing)this.wantResponse=true;
    }
    if(this.ending?.responseId===e.response.id&&e.response.status==='completed'){this.client(e);this.completeAfterPlayback(e.response,this.ending.message);return}
    if(!privateResponse&&e.response.status==='completed'&&!this.speaking&&this.responseRevisions.get(e.response.id)===this.inputRevision){
-    if(this.spokenFarewell?.responseId===e.response.id&&!this.truncated.has(this.spokenFarewell.itemId)){this.client(e);this.completeAfterPlayback(e.response,'Conversación terminada. Estamos preparando tu evaluación.');return}
+    if(!this.session.diagnostic&&this.spokenFarewell?.responseId===e.response.id&&!this.truncated.has(this.spokenFarewell.itemId)){this.client(e);this.completeAfterPlayback(e.response,'Conversación terminada. Estamos preparando tu evaluación.');return}
     const finish=(e.response.output||[]).find(x=>x.type==='function_call'&&x.name==='finish_conversation');
     if(finish&&!this.session.diagnostic){this.provider({type:'conversation.item.create',item:{type:'function_call_output',call_id:finish.call_id,output:'{"ending":true}'}});this.client(e);this.beginFarewell();return}
    }

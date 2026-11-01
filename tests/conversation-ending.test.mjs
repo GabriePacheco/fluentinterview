@@ -55,3 +55,21 @@ test('An uninterrupted farewell closes only on its own playback acknowledgement'
  const f=setup();f.relay.beginFarewell();await tick();f.relay.event({type:'response.created',response:{id:'bye'}});f.relay.event({type:'response.output_audio.delta',response_id:'bye',item_id:'bye-audio',delta:'AA=='});f.relay.event({type:'response.done',response:{id:'bye',status:'completed'}});await tick();assert.equal(f.closed(),0);
  f.relay.input({type:'fluent.playback.done',response_id:'old'});await tick();assert.equal(f.closed(),0);f.relay.input({type:'fluent.playback.done',response_id:'bye'});await f.relay.closeTask;assert.equal(f.closed(),1);assert.equal(f.downstream.sent.at(-1).completed,true);
 });
+
+test('A route step stops at committed final answer before late transcription can launch an extra question',async()=>{
+ const session={mode:'tutor',learning:{routeStep:true,targetAnswers:2}},f=setup(session);
+ for(let i=0;i<2;i++){
+  f.relay.event({type:'response.created',response:{id:'q'+i}});
+  f.relay.event({type:'response.output_audio_transcript.done',response_id:'q'+i,item_id:'qitem'+i,transcript:'What did you contribute?'});
+  f.relay.event({type:'response.done',response:{id:'q'+i,status:'completed'}});
+  f.relay.event({type:'input_audio_buffer.committed',item_id:'u'+i});
+  if(i===0)f.relay.event({type:'conversation.item.input_audio_transcription.completed',item_id:'u'+i,transcript:'I helped the customer choose the product.'});
+  await tick();
+ }
+ assert.equal(f.upstream.sent.filter(e=>e.type==='response.create').length,1,'Only the follow-up to the first answer was generated');
+ assert.equal(f.relay.practiceWaiting,true);
+ f.relay.event({type:'conversation.item.input_audio_transcription.completed',item_id:'u1',transcript:'I compared the options with the customer and explained their costs.'});await tick();
+ assert.equal(f.upstream.sent.filter(e=>e.type==='response.create').length,2);
+ assert.match(f.upstream.sent.at(-1).response.instructions,/Say ONLY this brief farewell/);
+ farewell(f.relay,session);await f.relay.closeTask;assert.equal(f.closed(),1);
+});

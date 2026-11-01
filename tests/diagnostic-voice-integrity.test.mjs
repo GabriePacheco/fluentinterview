@@ -71,3 +71,24 @@ test('ASR failure received during the audio decision requests clarification with
  const {relay,session,upstream}=fixture();session.diagnostic.stage=2;relay.event({type:'input_audio_buffer.committed',item_id:'u'});await tick();relay.event({type:'response.created',response:{id:'decision'}});relay.event({type:'conversation.item.input_audio_transcription.failed',item_id:'u'});complete(relay,'decision');await tick();
  assert.equal(session.diagnostic.stage,2);assert.equal(session.diagnostic.steps[0].outcome,'unclear');assert.match(upstream.sent.at(-1).response.instructions,/repeat or clarify/);await relay.close('',true);assert.equal(relay.session.diagnostic.transcriptionIncomplete,undefined);
 });
+
+test('Diagnostic question with an unsolicited goodbye waits for the candidate instead of closing',async()=>{
+ const {relay,upstream}=fixture();relay.request();await tick();
+ relay.event({type:'response.created',response:{id:'question'}});
+ relay.event({type:'response.output_audio_transcript.done',response_id:'question',item_id:'q',transcript:'What would you do differently? Goodbye.'});
+ relay.event({type:'response.done',response:{id:'question',status:'completed'}});await tick();
+ assert.equal(relay.closed,false);assert.equal(relay.closing,undefined);assert.equal(upstream.sent.length,1);
+ relay.event({type:'input_audio_buffer.committed',item_id:'answer'});relay.event({type:'conversation.item.input_audio_transcription.completed',item_id:'answer',transcript:'I would check the requirements with the customer first.'});await tick();
+ assert.equal(upstream.sent.at(-1).response.tool_choice.name,'diagnostic_step');await relay.close();
+});
+
+test('Scheduled diagnostic ending waits for the answer to the spoken question and then skips further questions',async()=>{
+ const {relay,upstream,session}=fixture();relay.request();await tick();relay.event({type:'response.created',response:{id:'question'}});
+ relay.event({type:'response.output_audio_transcript.done',response_id:'question',item_id:'q',transcript:'What is your name?'});
+ relay.scheduleFarewell();relay.event({type:'response.done',response:{id:'question',status:'completed'}});await tick();
+ assert.equal(upstream.sent.length,1);assert.equal(relay.ending,undefined);
+ relay.event({type:'input_audio_buffer.committed',item_id:'answer'});relay.event({type:'conversation.item.input_audio_transcription.completed',item_id:'answer',transcript:'My name is Gabriel.'});await tick();
+ relay.event({type:'response.created',response:{id:'decision'}});complete(relay,'decision');await tick();
+ assert.equal(session.diagnostic.steps.length,1);assert.equal(upstream.sent.filter(e=>e.type==='response.create').length,3);
+ assert.match(upstream.sent.at(-1).response.instructions,/Say ONLY this brief farewell/);assert.equal(relay.closed,false);await relay.close();
+});

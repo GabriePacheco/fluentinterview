@@ -9,7 +9,7 @@ test('Passing is based on exact criterion values, never an upward-rounded displa
  assert.equal(scoreReview(ratings(9)).passed,true);assert.throws(()=>scoreReview(ratings(10.01)));assert.throws(()=>scoreReview(ratings(NaN)));
 });
 test('Corrections quote actual words; invented quotations and unmeasured claims are rejected',()=>{
- const expanded=expandReview(result,input);assert.equal(expanded.scoring.score,8.5);assert.equal(expanded.strengths[0].quote,input.answers[0].text);
+ const expanded=expandReview(result,input);assert.equal(expanded.scoring.score,8.5);assert.equal(expanded.rubricVersion,3);assert.equal(expanded.strengths[0].quote,input.answers[0].text);
  const bad=structuredClone(result);bad.corrections[0].original='I managed a department';assert.throws(()=>expandReview(bad,input),/tus palabras/);
  const claim=structuredClone(result);claim.ratings.english.reason='Demuestras fluidez.';assert.throws(()=>expandReview(claim,input),/no se ha medido/);
 });
