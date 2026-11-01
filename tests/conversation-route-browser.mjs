@@ -33,10 +33,14 @@ try{
  await page.setViewportSize({width:1536,height:1024});await page.evaluate(()=>go('inicio'));
  await page.locator('.grade-ring').waitFor();await page.locator('.journey-ribbon [aria-current=step]').waitFor();
  assert.equal(await page.locator('.ribbon-step.passed').count(),1);assert.match(await page.locator('.last-conversation').innerText(),/Identificas tu contribución/);assert.equal(await page.locator('.grade-ring b').innerText(),'9');
+ assert.ok((await page.locator('.ribbon-title').allTextContents()).every(title=>title.trim().length>0),'Each visible step has its real title');
+ assert.doesNotMatch(await page.locator('.journey-ribbon').innerText(),/Pendiente/);
+ assert.equal(await page.locator('.ribbon-caption').innerText(),'Estás aquí');
+ await page.locator('.journey-card').screenshot({path:'qa/route-ribbon-desktop.png',animations:'disabled'});
  assert.equal(reviewCalls,2,'Home only reads the existing evaluation');
  assert.equal(await page.locator('main img').count(),0,'No character or generated illustration');
  await page.screenshot({path:'qa/step6-home-desktop.png',fullPage:true,animations:'disabled'});
- for(const width of [390,768]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);if(width===390)await page.screenshot({path:'qa/step6-home-mobile.png',fullPage:true,animations:'disabled'})}
+ for(const width of [390,768]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);if(width===390){await page.screenshot({path:'qa/step6-home-mobile.png',fullPage:true,animations:'disabled'});await page.locator('.journey-card').screenshot({path:'qa/route-ribbon-mobile.png',animations:'disabled'})}}
  await page.locator('[data-action=dashboard-interview]').click();await page.locator('#school-interview-form').waitFor();assert.equal(await page.locator('select[name=mode]').inputValue(),'interview');
  await page.evaluate(()=>go('inicio'));await page.locator('.launch-actions [data-action=path-start]').click();await page.locator('.path-room-title').waitFor();assert.equal(await page.evaluate(()=>pathState.selection.stepId),await page.evaluate(()=>pathState.data.nextStepId));
  await page.evaluate(()=>{learning.current=null;pathState.epoch++;Object.assign(pathState,{data:null,key:'current',loadingKey:null});go('inicio')});await page.locator('.journey-empty').waitFor();assert.equal(await page.locator('.journey-ribbon').count(),0,'No generic route is presented as personal');
