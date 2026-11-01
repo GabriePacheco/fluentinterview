@@ -16,3 +16,7 @@ La nota mostrada (7 + 6 + 5 + 6) / 4 = 6 es aritméticamente correcta. Las captu
 ## Validación
 
 11 pruebas locales de revisión/objetivos y una prueba de navegador con WebSocket simulado: objetivo completo aunque supere el resumen, banderas de recorte, filtro de contracción, preservación de errores reales, categoría incierta sin tachado y cierre existente. Captura de feedback revisada visualmente. Cero llamadas pagadas. No se afirma que el modelo real ya esté calibrado: debe observarse en evaluaciones nuevas.
+
+## Publicación
+
+Código `551b66f`, Worker `4e944cff-5d27-4bad-b796-d217e6ca6c48`; Firebase `fuentinterview`, canal `day1`, https://fuentinterview--day1-0vs64ic5.web.app. Despliegues confirmados; el endpoint de sesión exige autenticación y el SHA256 de `conversation-flow.js` coincide con el archivo local. No hubo reevaluación pagada ni cambio de datos históricos.
