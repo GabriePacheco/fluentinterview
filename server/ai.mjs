@@ -42,7 +42,9 @@ export function validatePayload(kind,payload){
  if(kind==='review'){
   if(!Array.isArray(payload.answers)||payload.answers.length>6||payload.answers.some(a=>!a||!/^answer[1-6]$/.test(a.id)||typeof a.text!=='string'||a.text.length>1000||typeof a.question!=='string'||a.question.length>350))throw invalid('Evidencia de revisión no válida.');
   if(new Set(payload.answers.map(a=>a.id)).size!==payload.answers.length)throw invalid('Respuestas duplicadas.');
-  return {profile:cleanProfile,kind:payload.kind==='session'?'session':'activity',context:String(payload.context||'').slice(0,600),answers:payload.answers,transcribed:payload.transcribed===true,sampled:payload.sampled===true};
+  let assessmentTarget=null;
+  if(payload.assessmentTarget){assessmentTarget={};for(const key of ['title','level','objective','criterion']){const value=payload.assessmentTarget[key];if(typeof value!=='string'||value.length>1200)throw invalid('Objetivo de evaluación no válido.');assessmentTarget[key]=value}}
+  return {profile:cleanProfile,kind:payload.kind==='session'?'session':'activity',context:String(payload.context||'').slice(0,600),assessmentTarget,answers:payload.answers,transcribed:payload.transcribed===true,sampled:payload.sampled===true};
  }
  throw invalid('Operación no admitida.');
 }

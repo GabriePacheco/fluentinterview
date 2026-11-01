@@ -18,12 +18,14 @@ export class SessionService{
  prefix(uid){return `sessions:${encodeURIComponent(uid)}:`}
  async evidence(uid,id){
   const s=await this.get(uid,id);if(s.status!=='completed')throw fail('Finaliza la conversación antes de solicitar su revisión.',409);
-  const all=[];let question='';for(const m of s.messages){if(m.role==='assistant')question=m.interrupted?'[Pregunta interrumpida; evalúa solo la respuesta disponible.]':m.content;else if(m.content.trim())all.push({question:question.slice(0,250),text:m.content.slice(0,800)})}
+  const all=[];let question='';for(const m of s.messages){if(m.role==='assistant')question=m.interrupted?'[Pregunta interrumpida; evalúa solo la respuesta disponible.]':m.content;else if(m.content.trim())all.push({question:question.slice(0,250),text:m.content.slice(0,800),questionTruncated:question.length>250,answerTruncated:m.content.length>800})}
   // A representative bounded sample includes the beginning and the final answer,
   // instead of silently ignoring everything beyond the sixth turn.
   const chosen=all.length<=6?all:Array.from({length:6},(_,i)=>all[Math.round(i*(all.length-1)/5)]);
   const context=s.practiceGoal?`Objetivo: ${s.practiceGoal.objective} Criterio: ${s.practiceGoal.criterion} Evalúa este objetivo con evidencia propia; repetir al tutor no demuestra dominio.`:s.learning?.routeStep?`Paso de entrevista, expresión orientativa ${s.learning.level}. Objetivo: ${s.learning.objective} Criterio: ${s.learning.criterion}. Evalúa lo que la persona explicó por sí misma; copiar una corrección del tutor no demuestra transferencia.`:s.purpose==='interview'||s.mode==='interview'?'Entrevista profesional · '+(s.interviewType||'screening'):s.learning?.objective||'Práctica de entrevista profesional';
-  return {source:s.source,profile:s.profile,context,practiceGoal:s.practiceGoal||null,answerCount:countPracticeAnswers(s.messages),answers:chosen.map((a,i)=>({...a,id:'answer'+(i+1)})),transcribed:s.transport==='realtime',sampled:all.length>6};
+  const target=s.learning?.routeStep?s.learning:s.practiceGoal;
+  const assessmentTarget=target?{title:target.title||'',level:s.learning?.level||'',objective:target.objective,criterion:target.criterion}:null;
+  return {source:s.source,profile:s.profile,context,assessmentTarget,practiceGoal:s.practiceGoal||null,answerCount:countPracticeAnswers(s.messages),answers:chosen.map((a,i)=>({...a,id:'answer'+(i+1)})),transcribed:s.transport==='realtime',sampled:all.length>6};
  }
 
  key(uid,id){if(!UUID.test(id||''))throw fail('Sesión no válida.');return this.prefix(uid)+id}

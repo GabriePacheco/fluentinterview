@@ -71,6 +71,8 @@ try{
  assert.equal(await page.evaluate(()=>window.__finishedStream.getAudioTracks()[0].readyState),'ended');
  assert.equal(reviewCalls,1);await page.getByRole('heading',{name:'Tus fortalezas',exact:true}).waitFor();assert.equal(await page.locator('del').textContent(),'I has');assert.ok((await page.locator('.review-score').textContent()).includes('8,5'));
  await page.getByRole('heading',{name:'Objetivo pendiente',exact:true}).waitFor();assert.equal(await page.evaluate(()=>!!(document.querySelector('.review-strengths').compareDocumentPosition(document.querySelector('.practice-outcome'))&Node.DOCUMENT_POSITION_FOLLOWING)),true);
+ await page.evaluate(()=>{school.review.result.corrections.push({kind:'uncertain_transcription',original:'apps',replacement:'ads',reason:'Posible confusión al transcribir; no es un error confirmado.'});school.review.result.practiceOutcome=null;school.review.result.assessmentTarget={title:'Tu función',objective:'Explicar tu función principal.',criterion:'Identificar tu rol y una tarea propia.'};schoolRender()});
+ await page.getByText('Posible confusión al transcribir',{exact:true}).waitFor();assert.equal(await page.locator('del').count(),1,'Only confirmed errors are crossed out');await page.getByRole('heading',{name:'Tu función',exact:true}).waitFor();
  await page.screenshot({path:'qa/conversation-feedback.png',fullPage:true,animations:'disabled'});
  await page.evaluate(id=>openReview('session',id),session.id);assert.equal(reviewCalls,1,'reopening a review must not regenerate it');
  await page.evaluate(()=>{learning.loaded=true;go('diagnostico')});await page.getByRole('button',{name:'Empezar mi diagnóstico oral'}).click();
