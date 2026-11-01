@@ -18,3 +18,7 @@ El código usa `gpt-realtime-2.1-mini`. Tarifa oficial de audio: US$10 de entrad
 GPT-Live 1 es una alternativa de integración distinta: US$0,05 por minuto de sesión, facturado por segundo, más modelo de backend y herramientas. No se ha migrado ni comprobado su habilitación en esta cuenta. No puede afirmarse que sea más barato para este producto sin comparar duración y consumo reales.
 
 Fuentes consultadas: https://developers.openai.com/api/docs/pricing y https://developers.openai.com/api/docs/models/gpt-live-1
+
+## Publicación verificada
+
+Código `099bac9`, Worker `dc3d31df-8448-47b9-83a2-46ed1071c925`, publicado el 31/10/2026. Wrangler confirmó el despliegue y el endpoint de sesión responde 401 sin credenciales, como corresponde. No hubo cambios de frontend. La verificación no incluye una nueva conversación pagada.
