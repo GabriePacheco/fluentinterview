@@ -1,3 +1,4 @@
+import {recordOpenAIUsage} from './openai-usage.mjs';
 import {CommerceService} from './commerce.mjs';
 import {commercePath,commerceRequest} from './commerce-api.mjs';
 import {readWebhook} from './lemon.mjs';
@@ -35,8 +36,8 @@ export function createApplication(options={}){
  let busy=false;let recent=[];
  const storage=new LocalSessionStorage(options.directory||path.join(root,'.local'));
  const commerce=new CommerceService(storage,{env:options.commerceEnv||process.env,client:options.lemonClient,budget:async()=>ledger.snapshot()});
- const run=async(kind,source,input,{uid})=>{
-  const scopedLedger={snapshot:()=>ledger.snapshot(),recordUsage:u=>ledger.recordUsage(u),reserve:()=>commerce.consume(uid,source,()=>ledger.reserve())};
+ const run=async(kind,source,input,{uid,sessionId})=>{
+  const scopedLedger={snapshot:()=>ledger.snapshot(),recordUsage:async(u,meta)=>{ledger.recordUsage(u);const policy=await commerce.policy(uid);await storage.transaction(tx=>recordOpenAIUsage(tx,{...meta,usage:u,sessionId,uid,scope:policy.development?'development':uid===commerce.env.ADMIN_UID?'owner':'users'}))},reserve:()=>commerce.consume(uid,source,()=>ledger.reserve())};
   if(source==='mock')await commerce.consume(uid,source);
   try{return await createAI({mode:source,apiKey:options.apiKey??process.env.OPENAI_API_KEY??'',ledger:scopedLedger,fetchImpl:options.fetchImpl}).run(kind,input)}catch(error){await commerce.audit('ai_failed',uid,String(error.status||500));throw error}
  };
@@ -46,7 +47,7 @@ export function createApplication(options={}){
  const study=new StudyService(storage,{assessments});
  assessments.sessionFor=(uid,id)=>sessions.get(uid,id);
  const routes=new ConversationRouteService(storage,{assessments,sessions});
- sessions.learning=(uid,input)=>input.routeId?routes.context(uid,input):input.studyId?study.context(uid,input.studyId):assessments.context(uid,input);
+ sessions.learning=(uid,input)=>input.routeId?routes.context(uid,input):input.studyId?study.context(uid,input.studyId):routes.practiceContext(uid,input);
  const feedback=new FeedbackService(storage,{source:ai.mode,budget:()=>ledger.snapshot(),evidence:(uid,kind,id)=>kind==='activity'?study.evidence(uid,id):sessions.evidence(uid,id),run:(source,input,context)=>run('review',source,input,context)});
  study.reviewFor=(uid,id)=>feedback.get(uid,'activity',id);
  const server=http.createServer(async(req,res)=>{

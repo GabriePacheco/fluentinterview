@@ -9,3 +9,11 @@
 @keyframes evaluation-spin{to{transform:rotate(360deg)}}@keyframes evaluation-shimmer{to{background-position:-220% 0}}
 @media(max-width:600px){.evaluation-loading{padding:24px 20px}.evaluation-loading-heading{align-items:flex-start;gap:16px}.evaluation-spinner{width:36px;height:36px;flex-basis:36px;border-width:4px}}
 @media(prefers-reduced-motion:reduce){.evaluation-spinner,.evaluation-placeholder,.evaluation-placeholder-panel{animation:none}}
+.practice-examples{border-top:1px solid #e9e5f5;margin-top:18px;padding-top:16px;min-width:0}
+.practice-examples h3{font-size:15px;margin:0 0 8px;color:#272348}
+.practice-examples summary{color:#6750c9;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:12px}
+.practice-examples .practice-examples-note{font-size:12px;line-height:1.6;color:#72738b;margin:0 0 12px}
+.practice-example{background:#f7f5ff;border:1px solid #ede8fc;border-radius:12px;padding:13px 14px;margin:10px 0;overflow-wrap:anywhere}
+.practice-example-label{font-size:10px;font-weight:700;letter-spacing:.09em;color:#7155cd}
+.practice-example p{font-size:13px;line-height:1.65;margin:7px 0 0;color:#42425f}
+.practice-example strong{color:#302b50;font-weight:600}

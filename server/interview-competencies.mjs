@@ -1,4 +1,5 @@
 // Competencies drive the route. Language exercises support a professional task.
+export const MIN_ROUTE_STAGES=7;
 export const INTERVIEW_COMPETENCIES={
  professional_intro:{rank:0,supportFocus:'concision',title:'Presenta tu perfil profesional',objective:'Presentar tu experiencia y conectar tu aportación con el puesto objetivo.',exercise:'Escribe una presentación breve con tu función, una aportación propia y su relación con el puesto.',masteryCheck:'Presentar tu perfil de forma pertinente y respaldar tu aportación con un detalle propio.'},
  role_fit:{rank:1,supportFocus:'evidence',title:'Conecta tu experiencia con el puesto',objective:'Explicar por qué tu experiencia y motivación responden a una necesidad del puesto.',exercise:'Elige una necesidad del puesto y relaciona una experiencia real con ella.',masteryCheck:'Justificar tu interés y tu aportación al puesto con evidencia de tu experiencia.'},
@@ -45,4 +46,26 @@ export function competencySteps(focus,count){
  // Preserve the final transfer task at every level, with a different capability at each step.
  const indices=count===6?[0,1,2,3,4,5]:count===5?[0,1,2,3,5]:count===4?[0,2,3,5]:count===3?[2,3,5]:[3,5];
  return indices.map(i=>({title:tasks[i][0],task:tasks[i][1],criterion:CRITERIA[focus][i]}));
+}
+
+// Extend saved four-stage plans without a paid re-evaluation or invented weaknesses.
+// Original module indexes stay stable for exercises, attempts and session references.
+export function extendRouteModules(assessment){
+ const original=assessment.result.modules;
+ if(original.length>=MIN_ROUTE_STAGES)return original;
+ if(original.length<4)throw Error('La ruta necesita al menos 7 etapas y un diagnóstico completo.');
+ const modules=professionalModules(original).sort((a,b)=>a.moduleIndex-b.moduleIndex);
+ if(!modules.length)return original;
+ const used=new Set(modules.map(m=>m.focus));
+ for(const [focus,competency] of Object.entries(INTERVIEW_COMPETENCIES)){
+  if(modules.length>=MIN_ROUTE_STAGES)break;if(used.has(focus))continue;
+  if(focus==='professional_intro'&&['B2','C1'].includes(assessment.result.level))continue;
+  const anchor=modules.find(m=>m.supportFocus===competency.supportFocus)||modules[0];
+  modules.push({...competency,focus,moduleIndex:modules.length,orientation:'transfer',
+   reason:`Amplía el ejemplo de tu diagnóstico para practicar: ${competency.objective}`,
+   evidenceQuote:anchor.evidenceQuote,
+   conversation:`${STEPS[focus][0][1]} Use the candidate's own experience and target role: ${String(assessment.profile?.role||'their target role').slice(0,120)}.`,
+   extendedFromSavedEvidence:true});used.add(focus);
+ }
+ return modules;
 }

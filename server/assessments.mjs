@@ -18,13 +18,13 @@ function cleanDraft(input){
 export function weeklyPlan(result,profile){
  if(!result.modules.length)return [];
  const minutes=[10,20,30].includes(parseInt(profile.minutes))?parseInt(profile.minutes):20;
- return Array.from({length:7},(_,i)=>({day:i+1,minutes,moduleIndex:i<4?i:i===5?3:0,title:i<4?result.modules[i].title:['Repasar tus prioridades','Simular una entrevista','Revisar evidencias y decidir el siguiente paso'][i-4],activities:i<4?[{minutes:Math.floor(minutes*.6),task:result.modules[i].conversation},{minutes:minutes-Math.floor(minutes*.6),task:result.modules[i].exercise}]:[{minutes,task:i===4?'Practica de nuevo dos respuestas y compara su claridad.':i===5?'Cuenta una experiencia y responde una repregunta para tu puesto objetivo.':'Comprueba los criterios de los módulos. Si reuniste evidencia nueva, realiza otra evaluación.'}]}));
+ return Array.from({length:7},(_,i)=>{const moduleIndex=i%result.modules.length,m=result.modules[moduleIndex];return {day:i+1,minutes,moduleIndex,title:m.title,activities:[{minutes:Math.floor(minutes*.6),task:m.conversation},{minutes:minutes-Math.floor(minutes*.6),task:m.exercise}]}});
 }
 export class AssessmentService{
  constructor(storage,{source='mock',run,budget}){this.storage=storage;this.source=source;this.run=run;this.budget=budget;this.inflight=new Map()}
  key(uid,id){if(!UUID.test(id||''))throw fail('Diagnóstico no válido.');return `assessment:${encodeURIComponent(uid)}:${id}`}
  index(uid){return `assessment-index:${encodeURIComponent(uid)}`}
- async context(uid,input={}){const index=await this.storage.get(this.index(uid));const id=input.assessmentId||index?.current;if(!id)return null;const s=await this.get(uid,id);if(s.status!=='completed')return null;const i=Number.isInteger(input.moduleIndex)&&input.moduleIndex>=0&&input.moduleIndex<4?input.moduleIndex:0;const m=s.result.modules[i];return {assessmentId:id,moduleIndex:i,level:s.result.level,title:m.title,objective:m.objective,conversation:m.conversation}}
+ async context(uid,input={}){const index=await this.storage.get(this.index(uid));const id=input.assessmentId||index?.current;if(!id)return null;const s=await this.get(uid,id);if(s.status!=='completed')return null;const i=Number.isInteger(input.moduleIndex)&&input.moduleIndex>=0&&input.moduleIndex<s.result.modules.length?input.moduleIndex:0;const m=s.result.modules[i];return {assessmentId:id,moduleIndex:i,level:s.result.level,title:m.title,objective:m.objective,conversation:m.conversation}}
  async get(uid,id){const key=this.key(uid,id);return this.storage.transaction(async tx=>{const s=await tx.get(key);if(!s)throw fail('Diagnóstico no encontrado.',404);if(s.status==='pending'&&Date.now()-s.startedAt>EVALUATION_PENDING_MS){s.status='failed';s.failure={code:'interrupted',at:Date.now()};s.error='La evaluación se interrumpió antes de confirmar un resultado.';await tx.put(key,s);const index=await tx.get(this.index(uid));if(index?.pending===id){index.pending=null;await tx.put(this.index(uid),index)}}return s})}
  async state(uid){let index=await this.storage.get(this.index(uid))||{ids:[],current:null,pending:null};if(index.pending)await this.get(uid,index.pending);index=await this.storage.get(this.index(uid))||index;const history=[];for(const id of index.ids){const s=await this.storage.get(this.key(uid,id));if(s)history.push({id,status:s.status,source:s.source,version:s.version,createdAt:s.createdAt,level:s.result?.level||null})}return {catalog:catalog(),history,current:index.current?await this.get(uid,index.current):null,pending:index.pending}}
  async save(uid,input){
@@ -65,7 +65,7 @@ export class AssessmentService{
  try{
   if(s.format==='oral-v1')s.scores={skills:{},details:[],audioBasis:'Conversación adaptativa. No se aplicaron ejercicios escritos ni una prueba auditiva independiente.'};
   const oral=s.format==='oral-v1'?{steps:s.diagnostic.steps.map(x=>({stage:x.stage,outcome:x.outcome,reason:x.reason})),endReason:s.diagnostic.endReason}:undefined;
-  const result=enough?(await this.run(s.source,{profile:s.profile,samples:s.samples,scores:{skills:s.scores.skills,audioBasis:s.scores.audioBasis},previous,oral},{uid})).result:insufficientResult();
+  const result=enough?(await this.run(s.source,{profile:s.profile,samples:s.samples,scores:{skills:s.scores.skills,audioBasis:s.scores.audioBasis},previous,oral},{uid,sessionId:s.sessionId||id})).result:insufficientResult();
   if(!enough&&s.format==='oral-v1')result.summary='Aún necesitamos más respuestas para estimar tu punto de partida. En otra conversación te pediremos describir tu trabajo y una experiencia sencilla. Tu ruta anterior se conserva.';
   if(s.source==='openai')validateDiagnosis(result,s.samples);
   const assessment=await this.storage.transaction(async tx=>{const current=await tx.get(key),index=await tx.get(this.index(uid));if(current?.status!=='pending'||index.pending!==id)throw fail('La evaluación ya no está activa.',409);

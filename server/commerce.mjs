@@ -1,3 +1,4 @@
+import {readOpenAIUsage,unlinkUsageUser} from './openai-usage.mjs';
 import {fail} from './http.mjs';
 import {LemonClient,verifyWebhook,digest,lemonURL} from './lemon.mjs';
 import {routeAttemptKey} from './conversation-route.mjs';
@@ -36,6 +37,7 @@ export class CommerceService{
    const intent=await tx.get('checkout-user:'+k);if(intent)await tx.delete('checkout-token:'+intent.token);await tx.delete('checkout-user:'+k);
    // Keep only a tombstone so a still-valid Firebase token cannot restore erased data.
    await tx.put(this.key(uid),{uid,deleted:true,deletedAt:this.now(),suspended:true});
+   await unlinkUsageUser(tx,uid);
    await tx.delete('subscription-user:'+k);await tx.put('commerce-users',(await tx.get('commerce-users')||[]).filter(x=>x!==uid));
    await tx.put('commerce-audit',(await tx.get('commerce-audit')||[]).filter(x=>x.uid!==uid));
   });return {deleted:true,firebaseCleanupRequired:true};
@@ -72,6 +74,22 @@ export class CommerceService{
   const data=await this.client.subscription(id);await this.apply(uid,data);await this.storage.transaction(async tx=>{await tx.put('webhook:'+hash,{at:this.now()});const ids=await tx.get('webhook-history')||[];for(const old of ids.slice(199))await tx.delete('webhook:'+old);await tx.put('webhook-history',[hash,...ids.slice(0,199)]);const intent=await tx.get('checkout-user:'+uidKey(uid));if(intent?.token){await tx.delete('checkout-token:'+intent.token);await tx.delete('checkout-user:'+uidKey(uid))}});await this.audit(event.meta.event_name,uid,data.attributes.status);return {received:true};
  });this.queue=task.catch(()=>{});return task;}
  async sync(user,{portal=false,cancel=false}={}){const s=await this.storage.get('subscription-user:'+uidKey(user.uid));if(!s)throw fail('No tienes una suscripción vinculada.',404);const data=await this.client.subscription(s.id,cancel?'DELETE':'GET');await this.apply(user.uid,data);if(portal)return {url:lemonURL(data.attributes.urls?.customer_portal)};return this.state(user)}
+ async openAIUsage(user){
+  this.requireAdmin(user);const data=await readOpenAIUsage(this.storage),accounts=new Map();
+  data.recent=await Promise.all(data.recent.map(async row=>{
+   const uid=row.uid||(row.scope==='owner'?this.env.ADMIN_UID:null);
+   if(!uid)return {...row,email:null,sessionType:null,status:null};
+   if(!accounts.has(uid))accounts.set(uid,this.storage.get(this.key(uid)));
+   const account=await accounts.get(uid);
+   if(account?.deleted)return {...row,uid:null,email:null,deletedUser:true,sessionType:null,status:null};
+   const session=await this.storage.get('sessions:'+uidKey(uid)+':'+row.id);
+   return {...row,uid,email:account?.email||null,startedAt:session?.voiceStartedAt||session?.createdAt||row.startedAt,
+    durationSeconds:row.durationSeconds??session?.voiceDurationSeconds??null,
+    sessionType:session?(session.purpose==='diagnostic'?'diagnostic':session.mode==='interview'?'interview':'tutor'):null,
+    status:session?.status||null};
+  }));
+  data.recent.sort((a,b)=>b.startedAt-a.startedAt);return data;
+ }
  async dashboard(user){this.requireAdmin(user);const ids=await this.storage.get('commerce-users')||[],users=[];for(const uid of ids){const r=await this.storage.get(this.key(uid));if(!r||r.deleted)continue;const sub=await this.storage.get('subscription-user:'+uidKey(uid)),q=await this.storage.get('quota:'+uidKey(uid));users.push({uid,email:r.email,suspended:r.suspended,subscription:sub?.status||'none',testPlan:entitlement(sub,this.now()),usage:q?.period===month(this.now())?q:{period:month(this.now()),real:0,test:0}})}return {users,audit:await this.storage.get('commerce-audit')||[],settings:await this.storage.get('commerce-settings')||{aiPaused:false},budget:await this.budget(),testMode:true}}
  async administer(user,input){this.requireAdmin(user);if(input.action==='pause-ai'&&typeof input.paused==='boolean'){await this.storage.transaction(tx=>tx.put('commerce-settings',{aiPaused:input.paused}));await this.audit('admin_ai_pause',user.uid,String(input.paused))}else if(input.action==='suspend'&&validId(input.uid)&&typeof input.suspended==='boolean'){if(input.uid===user.uid)throw fail('No puedes suspender tu propia cuenta administrativa.');await this.storage.transaction(async tx=>{const r=await tx.get(this.key(input.uid));if(!r||r.deleted)throw fail('Cuenta no encontrada.',404);r.suspended=input.suspended;await tx.put(this.key(input.uid),r)});await this.audit('admin_suspend',input.uid,String(input.suspended))}else throw fail('Acción no permitida.');return this.dashboard(user)}
 }

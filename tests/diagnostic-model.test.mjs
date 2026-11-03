@@ -8,8 +8,8 @@ const input=draft('model-test','advanced');
 const payload={profile:input.profile,samples:input.samples,scores:scoreTasks(input),previous:null};
 test('Selected goals expand into measurable modules while retaining individual evidence and questions',()=>{
  const raw=rawResult(input,'C1'),result=validateDiagnosis(expandDiagnosis(raw,payload),input.samples);
- assert.equal(result.modules.length,4);
- assert.match(result.modules[0].masteryCheck,/experiencia pertinente/);
+ assert.equal(result.modules.length,7);
+ assert.match(result.modules[0].masteryCheck,/Presentar tu perfil/);
  assert.equal(result.modules[0].evidenceQuote,raw.modules[0].evidenceQuote);
  assert.equal(result.modules[0].conversation,raw.modules[0].conversation);
  assert.doesNotMatch(result.priorities.join(' '),/confianza|fluidez/i);

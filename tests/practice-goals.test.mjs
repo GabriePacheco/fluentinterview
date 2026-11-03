@@ -23,9 +23,9 @@ test('Four independent answers end voice practice; pauses and delayed ASR do not
  assert.equal(upstream.sent.filter(e=>e.type==='response.create').length,4);assert.match(upstream.sent.at(-1).response.instructions,/farewell/);assert.equal(countPracticeAnswers(relay.snapshot()),4);
  relay.event({type:'response.created',response:{id:'bye'}});relay.event({type:'response.done',response:{id:'bye',status:'completed'}});await relay.closeTask;assert.equal(ended,1);assert.equal(downstream.sent.at(-1).completed,true);
 });
-test('Objective requires the full practice and at least 9, without rounding 8.95 into a pass',()=>{
+test('Objective requires the full practice and at least 7.5, without rounding 7.49 into a pass',()=>{
  const goal=buildPracticeGoal({mode:'tutor'}),result=points=>({nextStep:'Añade un resultado concreto.',scoring:scoreReview(Object.fromEntries(['relevance','structure','evidence','english'].map(k=>[k,{points,reason:'Evidencia'}])))});
- assert.equal(practiceOutcome(goal,result(8.95),4).achieved,false);assert.equal(practiceOutcome(goal,result(9),4).achieved,true);assert.equal(practiceOutcome(goal,result(10),1).achieved,false);
+ assert.equal(practiceOutcome(goal,result(7.49),4).achieved,false);assert.equal(practiceOutcome(goal,result(7.5),4).achieved,true);assert.equal(practiceOutcome(goal,result(10),1).achieved,false);
  assert.equal(countPracticeAnswers([{role:'user',content:'I helped'},{role:'assistant',interrupted:true,content:'cut'},{role:'user',content:'my team.'}]),1);
 });
 test('The saved review receives the goal and preserves its outcome without a second evaluation',async()=>{

@@ -1,6 +1,7 @@
 import {fail} from './http.mjs';
-export const commercePath=p=>['/api/billing','/api/billing/checkout','/api/billing/portal','/api/billing/sync','/api/billing/cancel','/api/admin','/api/account/delete'].includes(p);
+export const commercePath=p=>['/api/billing','/api/billing/checkout','/api/billing/portal','/api/billing/sync','/api/billing/cancel','/api/admin','/api/admin/openai-usage','/api/account/delete'].includes(p);
 export async function commerceRequest(service,path,method,input,user){
+ if(path==='/api/admin/openai-usage'&&method==='GET')return service.openAIUsage(user);
  if(path==='/api/billing'&&method==='GET')return service.state(user);
  if(path==='/api/admin'){if(method==='GET')return service.dashboard(user);if(method==='POST')return service.administer(user,input)}
  if(method==='POST'){

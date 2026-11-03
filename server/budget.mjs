@@ -1,3 +1,4 @@
+import {priceUsage} from './openai-usage.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -23,8 +24,8 @@ export class BudgetLedger {
   }
   recordUsage(usage){
     if(!Number.isInteger(usage?.prompt_tokens)||!Number.isInteger(usage?.completion_tokens)||usage.prompt_tokens<0||usage.completion_tokens<0)return;
-    // USD/million tokens, verified 2026-10-17. Ignore caching discounts conservatively.
-    this.data.usageEstimate+=(usage.prompt_tokens*.40+usage.completion_tokens*1.60)/1e6;
+    // Preserve historical estimates; new entries honor reported cache discounts.
+    this.data.usageEstimate+=priceUsage('gpt-4.1-mini-2025-04-14',usage).estimatedUsd;
     this.write();
   }
   snapshot(){return {limitUsd:this.limit/1e6,reservedUsd:this.data.reserved/1e6,estimatedUsageUsd:this.data.usageEstimate,attempts:this.data.attempts,reservationPerCallUsd:.05,remainingCalls:Math.max(0,Math.floor((this.limit-this.data.reserved)/RESERVATION_MICRO_USD))}}

@@ -7,23 +7,23 @@ import {assessment,routeFixture,ratings,finishAttempt} from './route-fixtures.mj
 const steps=route=>route.stages.flatMap(s=>s.steps);
 test('Route length, scaffolding, priorities and questions derive from level and individual diagnosis',()=>{
  const a=buildConversationRoute(assessment('A1')),b=buildConversationRoute(assessment('B2'));
- assert.equal(steps(a).length,22);assert.equal(steps(b).length,10);assert.notEqual(steps(a)[0].task,steps(b)[0].task);assert.equal(steps(a)[0].targetAnswers,3);
+ assert.equal(steps(a).length,37);assert.equal(steps(b).length,16);assert.notEqual(steps(a)[0].task,steps(b)[0].task);assert.equal(steps(a)[0].targetAnswers,3);
  const sameLevel=buildConversationRoute(assessment('A1','Backend developer','technical_clarity'));
- assert.notDeepEqual(a.stages.map(s=>s.title),sameLevel.stages.map(s=>s.title));assert.notEqual(steps(a)[0].question,steps(sameLevel)[0].question);assert.match(steps(sameLevel)[0].objective,/Backend developer/);
+ assert.notEqual(steps(a)[0].question,steps(sameLevel)[0].question);assert.match(steps(sameLevel)[0].objective,/Backend developer/);
 });
-test('Exact 9 advances; near 9 fails, retries vary, reopening is idempotent and approvals survive later failure/deletion',async()=>{
+test('Exact 7.5 advances; near 7.5 fails, retries vary, reopening is idempotent and approvals survive later failure/deletion',async()=>{
  const f=await routeFixture(),{routes,record,sessions,storage}=f;let route=(await routes.state('alice')).route;const first=steps(route)[0],second=steps(route)[1];
  const input={id:crypto.randomUUID(),routeId:record.id,stepId:first.id};const [a,b]=await Promise.all([routes.start('alice',input,true),routes.start('alice',input,true)]);assert.equal(a.session.id,b.session.id);assert.equal(steps((await routes.state('alice')).route)[0].attempts.length,1);
- const edge=ratings(9);edge.english.points=8.99;await finishAttempt(f,a.session,edge);route=(await routes.state('alice')).route;assert.equal(route.completed,0);assert.equal(steps(route)[0].latest.score,8.99);assert.match(steps(route)[0].latest.reason,/Inglés/);
+ const edge=ratings(7.5);edge.english.points=7.49;await finishAttempt(f,a.session,edge);route=(await routes.state('alice')).route;assert.equal(route.completed,0);assert.equal(steps(route)[0].latest.score,7.49);assert.match(steps(route)[0].latest.reason,/Inglés/);
  await assert.rejects(()=>routes.start('alice',{...input,id:crypto.randomUUID(),stepId:second.id},true),{status:409});
  const retry=(await routes.start('alice',{...input,id:crypto.randomUUID()},true)).session;assert.notEqual(retry.learning.scenario,a.session.learning.scenario);assert.match(retry.learning.retryFocus,/Inglés/);assert.ok(retry.learning.avoidQuestions.length);
- await finishAttempt(f,retry,9);
+ await finishAttempt(f,retry,7.5);
  const storedReview=await storage.get('feedback:alice:session:'+retry.id);
  await schoolRequest({routes,feedback:{get:async()=>storedReview}},'/api/feedback/session/'+retry.id,'GET',{}, {uid:'alice',emailVerified:true});
  assert.ok((await storage.get(f.assessments.key('alice',record.id))).conversationRoute.stages[0].steps[0].passedAt,'approval is persisted before feedback is delivered');
  route=(await routes.state('alice')).route;assert.equal(route.completed,1);assert.equal(route.nextStepId,second.id);
  const later=(await routes.start('alice',{...input,id:crypto.randomUUID()},true)).session;await finishAttempt(f,later,7);assert.equal((await routes.state('alice')).route.completed,1);
- await sessions.remove('alice',retry.id);const restarted=new ConversationRouteService(storage,{assessments:f.assessments,sessions});assert.equal((await restarted.state('alice')).route.completed,1);assert.equal(steps((await restarted.state('alice')).route)[0].passedScore,9);
+ await sessions.remove('alice',retry.id);const restarted=new ConversationRouteService(storage,{assessments:f.assessments,sessions});assert.equal((await restarted.state('alice')).route.completed,1);assert.equal(steps((await restarted.state('alice')).route)[0].passedScore,7.5);
 });
 test('Ownership, prerequisites, real audio evidence and route versions are enforced on server',async()=>{
  const f=await routeFixture(),{routes,record,storage,assessments}=f;const route=(await routes.state('alice')).route,input={id:crypto.randomUUID(),routeId:record.id,stepId:steps(route)[0].id};
@@ -35,7 +35,7 @@ test('Ownership, prerequisites, real audio evidence and route versions are enfor
 });
 test('Focused tutor receives the step and ends after sufficient saved question/answer pairs',async()=>{
  const f=await routeFixture(),route=(await f.routes.state('alice')).route;const session=(await f.routes.start('alice',{id:crypto.randomUUID(),routeId:route.assessmentId,stepId:steps(route)[0].id},true)).session;
- assert.match(realtimeConfig(session).session.instructions,/NOT a general introduction/);assert.match(realtimeConfig(session).session.instructions,/Customer support/);assert.equal(session.mode,'tutor');
+ assert.match(realtimeConfig(session).session.instructions,/not a general introduction/i);assert.match(realtimeConfig(session).session.instructions,/Customer support/);assert.equal(session.mode,'tutor');
  class Socket extends EventTarget{readyState=1;send(){}close(){this.readyState=3}}let closed=0;const relay=new RealtimeRelay({upstream:new Socket(),downstream:new Socket(),session,save:async()=>{},authorize:async()=>{},usage:async()=>{},onClose:async()=>closed++});
  for(let i=0;i<3;i++){relay.event({type:'response.output_audio_transcript.done',item_id:'a'+i,transcript:'What happened in that situation?'});relay.event({type:'conversation.item.input_audio_transcription.completed',item_id:'u'+i,transcript:'I helped the customer choose a suitable product.'})}
  await relay.close();assert.equal(closed,1);assert.equal(relay.snapshot().filter(m=>m.role==='user').length,3);

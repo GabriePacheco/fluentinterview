@@ -4,9 +4,9 @@ const ratings=n=>Object.fromEntries(['relevance','structure','evidence','english
 const input={kind:'session',transcribed:true,profile:{role:'Analyst'},answers:[{id:'answer1',question:'Tell me about your work.',text:'I has five years of experience and I create weekly reports for customers.'}]};
 const result={summary:'Describes tu trabajo con un ejemplo concreto.',strengths:[{answerId:'answer1',comment:'Explicas qué haces y para quién.'}],ratings:ratings(8.5),corrections:[{answerId:'answer1',original:'I has',replacement:'I have',reason:'Con I corresponde have.',kind:'error'}],observations:[{answerId:'answer1',focus:'grammar',finding:'practice',comment:'Revisa la forma del verbo.',suggestion:'Practica otra presentación con I have.'}],nextStep:'Cuenta una tarea distinta y a quién ayuda.'};
 test('Passing is based on exact criterion values, never an upward-rounded display',()=>{
- for(const n of [8.9,8.95])assert.equal(scoreReview(ratings(n)).passed,false);
- const edge=ratings(9);edge.english.points=8.99;const score=scoreReview(edge);assert.equal(score.raw,8.9975);assert.equal(score.score,8.99);assert.equal(score.passed,false);
- assert.equal(scoreReview(ratings(9)).passed,true);assert.throws(()=>scoreReview(ratings(10.01)));assert.throws(()=>scoreReview(ratings(NaN)));
+ for(const n of [7.4,7.49])assert.equal(scoreReview(ratings(n)).passed,false);
+ const edge=ratings(7.5);edge.english.points=7.49;const score=scoreReview(edge);assert.equal(score.raw,7.4975);assert.equal(score.score,7.49);assert.equal(score.passed,false);
+ assert.equal(scoreReview(ratings(7.5)).passed,true);assert.throws(()=>scoreReview(ratings(10.01)));assert.throws(()=>scoreReview(ratings(NaN)));
 });
 test('Corrections quote actual words; invented quotations and unmeasured claims are rejected',()=>{
  const expanded=expandReview(result,input);assert.equal(expanded.scoring.score,8.5);assert.equal(expanded.rubricVersion,4);assert.equal(expanded.strengths[0].quote,input.answers[0].text);
@@ -17,7 +17,7 @@ test('New structured review schema validates numeric ratings through the provide
  let calls=0;const ai=createAI({mode:'openai',apiKey:'fixture',ledger:{reserve:async()=>calls++,recordUsage:async()=>{},snapshot:async()=>({attempts:calls})},fetchImpl:async(_url,options)=>{
   const body=JSON.parse(options.body);assert.equal(body.max_completion_tokens,2600);assert.ok(body.response_format.json_schema.schema.required.includes('ratings'));assert.equal(JSON.parse(body.messages[1].content).transcribed,true);
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(result)}}],usage:{prompt_tokens:100,completion_tokens:100}});
- }});const output=await ai.run('review',input);assert.equal(output.result.scoring.passed,false);assert.equal(calls,1);
+ }});const output=await ai.run('review',input);assert.equal(output.result.scoring.passed,true);assert.equal(calls,1);
 });
 test('Long Realtime sessions sample start, middle and end, marking interrupted questions',async()=>{
  const id=crypto.randomUUID(),s={id,source:'openai',transport:'realtime',status:'completed',mode:'interview',profile:{},messages:[],feedback:[]};

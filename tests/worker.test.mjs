@@ -23,6 +23,13 @@ test('Worker durable budget is atomic across concurrent users and survives resta
   assert.equal((await commerceCall('/api/billing','GET',{uid:'alice'})).data.plan,'free');
   assert.equal((await commerceCall('/api/admin','GET',{uid:'alice',admin:true})).status,403);
   assert.equal((await commerceCall('/api/admin','GET',{uid:'owner',emailVerified:false})).status,403);
+  assert.equal((await mf.dispatchFetch('https://api.test/api/admin/openai-usage')).status,401);
+  assert.equal((await commerceCall('/api/admin/openai-usage','GET',{uid:'alice',admin:true})).status,403);
+  assert.equal((await commerceCall('/api/admin/openai-usage','GET',{uid:'owner',emailVerified:false})).status,403);
+  await stub.fetch('https://budget/usage',{method:'POST',body:JSON.stringify({uid:'development',usage:{prompt_tokens:1000,completion_tokens:500,prompt_tokens_details:{cached_tokens:500}},meta:{id:'usage-fixture',model:'gpt-4.1-mini-2025-04-14'}})});
+  const monitor=(await commerceCall('/api/admin/openai-usage','GET',{uid:'owner',emailVerified:true})).data;
+  assert.equal(monitor.total.events,1);assert.equal(monitor.total.cachedTokens,500);assert.ok(Math.abs(monitor.total.estimatedUsd-.00105)<1e-10);
+  assert.equal((await commerceCall('/api/billing','GET',{uid:'alice'})).data.openai,undefined);
   assert.equal((await commerceCall('/api/admin','POST',{uid:'owner',emailVerified:true},{action:'suspend',uid:'alice',suspended:true})).status,200);
   assert.equal((await stub.fetch('https://budget/access',{method:'POST',body:JSON.stringify({uid:'alice'})})).status,403);
   await commerceCall('/api/admin','POST',{uid:'owner',emailVerified:true},{action:'suspend',uid:'alice',suspended:false});

@@ -1,3 +1,4 @@
+import {priceUsage,recordOpenAIUsage} from '../server/openai-usage.mjs';
 import {CommerceService} from '../server/commerce.mjs';
 import {commercePath,commerceRequest} from '../server/commerce-api.mjs';
 import {readWebhook} from '../server/lemon.mjs';
@@ -15,11 +16,11 @@ export class BudgetCoordinator {
  constructor(ctx,env){
   this.storage=ctx.storage;this.env=env;
   const op=async(name,extra={})=>{const r=await this.fetch(new Request(`https://budget${name}`,{method:'POST',body:JSON.stringify({uid:'internal-ledger',...extra})}));const data=await r.json();if(!r.ok)throw fail(data.error,r.status);return data};
-  const ledger={snapshot:()=>op('/snapshot'),reserve:()=>op('/reserve'),recordUsage:usage=>op('/usage',{usage})};
+  const ledger={snapshot:()=>op('/snapshot'),reserve:()=>op('/reserve'),recordUsage:(usage,meta)=>op('/usage',{usage,meta})};
   this.commerce=new CommerceService(this.storage,{env,budget:ledger.snapshot});
-  const run=async(kind,source,input,{uid})=>{
+  const run=async(kind,source,input,{uid,sessionId})=>{
    if(source==='openai'&&env.AI_MODE!=='openai')throw fail('La IA está pausada.',503);
-   const scopedLedger={...ledger,reserve:()=>op('/reserve',{uid,quota:true}),recordUsage:usage=>op('/usage',{uid,quota:true,usage})};
+   const scopedLedger={...ledger,reserve:()=>op('/reserve',{uid,quota:true}),recordUsage:(usage,meta)=>op('/usage',{uid,quota:true,usage,meta:{...meta,sessionId}})};
    if(source==='mock')await this.commerce.consume(uid,source);
    try{return await createAI({mode:source,apiKey:env.OPENAI_API_KEY||'',model:MODEL,ledger:scopedLedger}).run(kind,input)}catch(error){await this.commerce.audit('ai_failed',uid,String(error.status||500));throw error}
   };
@@ -28,7 +29,7 @@ export class BudgetCoordinator {
   this.study=new StudyService(this.storage,{assessments:this.assessments});
   this.assessments.sessionFor=(uid,id)=>this.sessions.get(uid,id);
   this.routes=new ConversationRouteService(this.storage,{assessments:this.assessments,sessions:this.sessions});
-  this.sessions.learning=(uid,input)=>input.routeId?this.routes.context(uid,input):input.studyId?this.study.context(uid,input.studyId):this.assessments.context(uid,input);
+  this.sessions.learning=(uid,input)=>input.routeId?this.routes.context(uid,input):input.studyId?this.study.context(uid,input.studyId):this.routes.practiceContext(uid,input);
   this.feedback=new FeedbackService(this.storage,{source:env.AI_MODE||'mock',budget:ledger.snapshot,evidence:(uid,kind,id)=>kind==='activity'?this.study.evidence(uid,id):this.sessions.evidence(uid,id),run:(source,input,context)=>run('review',source,input,context)});
   this.study.reviewFor=(uid,id)=>this.feedback.get(uid,'activity',id);
   this.realtime=new RealtimeService(this);
@@ -95,7 +96,8 @@ export class BudgetCoordinator {
      if(policy.development)data.reserved+=50000;data.attempts++;await tx.put(ledgerKey,data);if(quota)await tx.put(quota.key,quota.value);
     }else if(operation==='/usage'){
      const usage=input.usage;
-     if(Number.isInteger(usage?.prompt_tokens)&&Number.isInteger(usage?.completion_tokens)&&usage.prompt_tokens>=0&&usage.completion_tokens>=0){data.usageEstimate+=(usage.prompt_tokens*.4+usage.completion_tokens*1.6)/1e6;await tx.put(ledgerKey,data)}
+     if(Number.isInteger(usage?.prompt_tokens)&&Number.isInteger(usage?.completion_tokens)&&usage.prompt_tokens>=0&&usage.completion_tokens>=0){data.usageEstimate+=priceUsage(MODEL,usage).estimatedUsd;await tx.put(ledgerKey,data)}
+     await recordOpenAIUsage(tx,{...input.meta,model:MODEL,usage,uid:input.uid,id:input.meta?.id,scope:policy.development?'development':input.uid===this.env.ADMIN_UID?'owner':'users'});
     }else if(operation!=='/snapshot')throw fail('Operación desconocida.',404);
     return {limitUsd:limit,reservedUsd:data.reserved/1e6,estimatedUsageUsd:data.usageEstimate,attempts:data.attempts,reservationPerCallUsd:.05,remainingCalls:Math.max(0,Math.floor((Math.floor(limit*1e6)-data.reserved)/50000))};
    });
@@ -128,7 +130,7 @@ export default {
    const user=await createTokenVerifier(env.FIREBASE_PROJECT_ID)(request.headers.get('authorization'));
    const stub=env.BUDGET.get(env.BUDGET.idFromName('global-v1'));
    const operation=async(name,extra={})=>{const response=await stub.fetch(`https://budget${name}`,{method:'POST',body:JSON.stringify({uid:user.uid,...extra})});const data=await response.json();if(!response.ok)throw fail(data.error,response.status);return data};
-   const ledger={snapshot:()=>operation('/snapshot'),reserve:()=>operation('/reserve'),recordUsage:usage=>operation('/usage',{usage})};
+   const ledger={snapshot:()=>operation('/snapshot'),reserve:()=>operation('/reserve'),recordUsage:(usage,meta)=>operation('/usage',{usage,meta})};
    if(commercePath(path)){const payload=request.method==='POST'?await readJSON(request):{};if(request.method!=='GET')await operation('/allow');return json(await operation('/commerce',{path,method:request.method,payload,user}),200,cors)}
    await operation('/access',{user});
    if(path==='/api/realtime/ticket'){

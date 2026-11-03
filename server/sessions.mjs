@@ -82,7 +82,7 @@ export class SessionService{
   const startedAt=Date.now();
   try{
    // Save the final answer and farewell without buying another question.
-   const result=messages.filter(m=>m.role==='user').length>=(s.practiceGoal?.targetAnswers||MAX_TURNS)?null:await this.run(s.source,{profile:s.profile,mode:s.mode,interviewType:s.interviewType,messages,learning:s.practiceGoal?{...s.learning,practiceGoal:s.practiceGoal}:s.learning},{uid});
+   const result=messages.filter(m=>m.role==='user').length>=(s.practiceGoal?.targetAnswers||MAX_TURNS)?null:await this.run(s.source,{profile:s.profile,mode:s.mode,interviewType:s.interviewType,messages,learning:s.practiceGoal?{...s.learning,practiceGoal:s.practiceGoal}:s.learning},{uid,sessionId:s.id});
    const final=await this.storage.transaction(async tx=>{
     const current=await tx.get(key);if(!current||current.pending?.requestId!==input.requestId)throw fail('No se pudo guardar el turno.',409);
     current.messages=messages;if(result){current.messages.push({role:'assistant',content:result.result.reply});current.feedback.push({focus:result.result.focus,feedback:result.result.feedback,latencyMs:Date.now()-startedAt})}

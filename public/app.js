@@ -1,5 +1,7 @@
 const $ = s => document.querySelector(s);
 const icons = {
+ search:'M15.5 15.5 21 21M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
+ refresh:'M20 7v5h-5M4 17v-5h5M5 8a8 8 0 0 1 13-3l2 3M4 16l2 3a8 8 0 0 0 13-3',
  home:'M3 10 12 3l9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
  route:'M5 4h12a3 3 0 0 1 0 6H7a3 3 0 0 0 0 6h12M5 2v4m14 8 3 2-3 2',
  book:'M12 5v16M3 3c4-1 7 0 9 2 2-2 5-3 9-2v16c-4-1-7 0-9 2-2-2-5-3-9-2Z',
