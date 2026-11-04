@@ -1,3 +1,6 @@
 #!/bin/sh
-echo "Este repositorio es solo local. No se permite publicar con git push." >&2
-exit 1
+# Remote explicitly authorized by the owner on 2026-11-03.
+case "$2" in
+  https://github.com/GabriePacheco/fluentInterview.git|git@github.com:GabriePacheco/fluentInterview.git) exit 0 ;;
+  *) echo "Remoto no autorizado para este proyecto." >&2; exit 1 ;;
+esac

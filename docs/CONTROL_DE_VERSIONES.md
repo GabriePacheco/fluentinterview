@@ -2,7 +2,7 @@
 
 Repositorio: `E:/Gabriel/INTERVIEW/fluent-interview-app`. Rama principal: `main`.
 Inicio del historial: 31 de octubre de 2026. No se puede reconstruir con Git el historial anterior a este punto.
-Sin remotos ni GitHub. `pre-push` bloquea subidas accidentales.
+El propietario autorizó GitHub el 3 de noviembre de 2026. Remoto: `https://github.com/GabriePacheco/fluentInterview.git`. El hook `pre-push` permite exclusivamente ese destino; la revisión de credenciales antes de cada commit sigue activa. La versión de código `04290b0` se sube mediante la rama `version-2026-11-04`, conservando el historial independiente de `main` remoto. El nombre de la rama usa la fecha UTC; la autorización ocurrió el 3 de noviembre en Ecuador.
 
 ## Qué se conserva
 
