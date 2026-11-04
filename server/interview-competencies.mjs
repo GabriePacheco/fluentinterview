@@ -38,8 +38,8 @@ export function professionalModules(modules){
   const candidates=INTERVIEW_COMPETENCIES[m.focus]?[m.focus]:LEGACY[m.focus]||['professional_intro','experience_story','justify_decisions','handle_followups'];
   const focus=[...candidates,...Object.keys(INTERVIEW_COMPETENCIES)].find(k=>!used.has(k));if(!focus)throw Error('Too many interview competencies');used.add(focus);
   const c=INTERVIEW_COMPETENCIES[focus];
-  return {...m,...c,focus,moduleIndex,adaptedFrom:m.focus!==focus?m.focus||'legacy':null};
- }).sort((a,b)=>a.rank-b.rank);
+  return {...m,...c,...(INTERVIEW_COMPETENCIES[m.focus]?m:{}),focus,moduleIndex,adaptedFrom:m.focus!==focus?m.focus||'legacy':null};
+ });
 }
 export function competencySteps(focus,count){
  const tasks=STEPS[focus];

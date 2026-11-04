@@ -87,7 +87,7 @@ async function loadProfile(user){
    transaction.set(ref,data);return data;
   });
   if(generation!==account.generation||auth.currentUser?.uid!==user.uid)return;
-  account.profile=profile;Object.assign(state,Object.fromEntries(profileKeys.map(k=>[k,profile[k]??defaults[k]])));
+  account.profile=profile;state.targetRoles=profile.targetRoles||[];Object.assign(state,Object.fromEntries(profileKeys.map(k=>[k,profile[k]??defaults[k]])));
   if(verifiedUser(user)&&hasCompletedOnboarding(profile)){window.dispatchEvent(new Event('fluent-auth-ready'));await prepareInitialScreen()}
   if(generation!==account.generation||auth.currentUser?.uid!==user.uid)return;
   account.initializing=false;
@@ -121,7 +121,7 @@ document.addEventListener('submit',async event=>{
   try{
    const data=onboardingData(new FormData(form));await setDoc(doc(db,'fi_users',user.uid),{...data,updatedAt:serverTimestamp()},{merge:true});
    if(auth.currentUser?.uid!==user.uid)return;
-   account.profile={...account.profile,...data};Object.assign(state,{name:data.name,role:data.role,profession:data.profession});
+   account.profile={...account.profile,...data};Object.assign(state,{name:data.name,role:data.role,profession:data.profession,targetRoles:data.targetRoles});
    account.initializing=true;delete document.querySelector('#main').dataset.accountGate;render();
    window.dispatchEvent(new Event('fluent-auth-ready'));await prepareInitialScreen();
    if(auth.currentUser?.uid!==user.uid)return;

@@ -62,5 +62,5 @@ test('Completed oral evidence creates one route, preserves prior routes with ins
 test('Diagnosis adapter carries oral evidence and accepts a validated structured response without network',async()=>{
  const input=draft(crypto.randomUUID());input.oral={steps:[{stage:1,outcome:'clear',reason:'Responde a la pregunta.'}],endReason:'evidence_complete'};let sent;
  const ai=createAI({mode:'openai',apiKey:'fixture',ledger:{reserve:async()=>{},recordUsage:async()=>{},snapshot:async()=>({})},fetchImpl:async(url,options)=>{sent=JSON.parse(options.body);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(rawResult(input))}}],usage:{}})}});
- const result=await ai.run('diagnosis',input);assert.equal(result.result.level,'B1');assert.match(sent.messages[0].content,/adaptive spoken job-interview/);assert.deepEqual(JSON.parse(sent.messages[1].content).oral,input.oral);
+ const result=await ai.run('diagnosis',input);assert.equal(result.result.level,'B1');assert.match(sent.messages[0].content,/Samples group actual transcripts/);assert.deepEqual(JSON.parse(sent.messages[1].content).oral,input.oral);
 });

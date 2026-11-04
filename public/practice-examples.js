@@ -50,7 +50,7 @@ const practiceExamplePairs={
  'Decide cuándo reconsiderar':[['¿Qué te haría cambiar de recomendación?','La revisaría si la prueba muestra que los usuarios no pueden completar su tarea.'],['¿Qué dato necesitarías antes de mantener tu postura?','Necesitaría conocer el resultado de las pruebas y el esfuerzo real de mantenimiento.']]
 };
 function practiceExamplesHTML(context,{collapsed=false}={}){
- const pairs=Object.hasOwn(practiceExamplePairs,context?.title)?practiceExamplePairs[context.title]:null;if(!pairs)return '';
+ const pairs=context?.examples?.length?context.examples.map(e=>[e.question,e.answer]):Object.hasOwn(practiceExamplePairs,context?.title)?practiceExamplePairs[context.title]:null;if(!pairs)return '';
  const content=`<p class="practice-examples-note">Ejemplos ilustrativos en español. La conversación será en inglés y puede variar. Usa tu experiencia real.</p>${pairs.map(([question,answer],i)=>`<div class="practice-example"><span class="practice-example-label">EJEMPLO ${i+1}</span><p><strong>Pregunta:</strong> ${escapeHTML(question)}</p><p><strong>Respuesta:</strong> ${escapeHTML(answer)}</p></div>`).join('')}`;
  return collapsed?`<details class="practice-examples"><summary>Ver 2 ejemplos en español</summary>${content}</details>`:`<section class="practice-examples" aria-label="Ejemplos para preparar tu respuesta"><h3>Así podría ser la conversación</h3>${content}</section>`;
 }

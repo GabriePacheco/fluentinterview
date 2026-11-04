@@ -18,11 +18,11 @@ export function validatePayload(kind,payload){
  if(!payload||typeof payload!=='object'||Array.isArray(payload))throw invalid('Solicitud no válida.');
  const profile=payload.profile||{};
  if(typeof profile!=='object'||Array.isArray(profile))throw invalid('Perfil no válido.');
- const cleanProfile={};for(const key of ['name','role','profession','goal','minutes','experience','job']){if(profile[key]!==undefined){if(typeof profile[key]!=='string'||profile[key].length>(['experience','job'].includes(key)?1200:200))throw invalid('Perfil demasiado largo.');cleanProfile[key]=profile[key]}}
+ const cleanProfile={};if(profile.targetRoles!==undefined){if(!Array.isArray(profile.targetRoles)||profile.targetRoles.length>5||profile.targetRoles.some(r=>typeof r!=='string'||!r.trim()||r.length>100))throw invalid('Puestos de interés no válidos.');cleanProfile.targetRoles=[...new Set(profile.targetRoles)]};for(const key of ['name','role','profession','goal','minutes','experience','job']){if(profile[key]!==undefined){if(typeof profile[key]!=='string'||profile[key].length>(['experience','job'].includes(key)?1200:200))throw invalid('Perfil demasiado largo.');cleanProfile[key]=profile[key]}}
  if(kind==='conversation'){
    if(!Array.isArray(payload.messages)||payload.messages.length>12)throw invalid('La sesión admite hasta 12 mensajes.');
    const messages=payload.messages.map(m=>{if(!m||!['user','assistant'].includes(m.role)||typeof m.content!=='string'||m.content.length>1800)throw invalid('Mensaje no válido o demasiado largo.');return {role:m.role,content:m.content}});
-   let learning=null;if(payload.learning){if(typeof payload.learning!=='object'||JSON.stringify(payload.learning).length>2500)throw invalid('Contexto de aprendizaje no válido.');learning=payload.learning}
+   let learning=null;if(payload.learning){if(typeof payload.learning!=='object')throw invalid('Contexto de aprendizaje no válido.');const {examples,...context}=payload.learning;if(JSON.stringify(context).length>2500)throw invalid('Contexto de aprendizaje no válido.');learning=context}
    const interviewType=['screening','behavioral','project'].includes(payload.interviewType)?payload.interviewType:'screening';
    return {profile:cleanProfile,mode:payload.mode==='interview'?'interview':'tutor',interviewType,messages,learning};
  }
@@ -56,7 +56,7 @@ function evaluationSchema(kind,payload){
   for(const key of ['strengths','corrections','observations'])schema.properties[key].items.properties.answerId.enum=payload.answers.map(a=>a.id);
   schema.properties.strengths.maxItems=3;schema.properties.corrections.maxItems=3;schema.properties.observations.minItems=1;schema.properties.observations.maxItems=4;
  }else{
-  schema.properties.modules.maxItems=8;schema.properties.strengths.maxItems=3;schema.properties.priorities.maxItems=4;schema.properties.evidence.maxItems=3;
+  schema.properties.modules.maxItems=8;const module=schema.properties.modules.items;module.properties.steps.minItems=2;module.properties.steps.maxItems=6;module.properties.examples.minItems=2;module.properties.examples.maxItems=2;schema.properties.strengths.maxItems=3;schema.properties.priorities.maxItems=4;schema.properties.evidence.maxItems=3;
  }
  return schema;
 }
@@ -93,7 +93,7 @@ export function createAI({mode='mock',apiKey='',model=MODEL,ledger,fetchImpl=fet
    const body={model:MODEL,messages:[{role:'system',content:(kind==='diagnosis'?DIAGNOSTIC_PROMPT+'\n'+FOCUS_PROMPT:kind==='review'?REVIEW_PROMPT:instructions[kind])+(kind==='conversation'?' feedback: one brief Spanish observation based on the latest answer, or insufficient evidence. Text cannot establish acoustic/listening skills. Start simply if level is unknown. behavioral: past situation; project: project/technical decisions; screening: experience/motivation.':'')+(kind==='conversation'&&payload.mode==='tutor'?TUTOR_CORRECTION_STYLE:'')},{role:'user',content:JSON.stringify(payload)}],max_completion_tokens:kind==='diagnosis'?2400:kind==='review'?1800:kind==='plan'?1800:300,temperature:.3,store:false,response_format:{type:'json_schema',json_schema:{name:kind,strict:true,schema}}};
    if(kind==='conversation'&&payload.learning?.practiceGoal)body.messages[0].content+=practiceGoalPrompt(payload.learning.practiceGoal);
    if(kind==='diagnosis'&&payload.oral)body.messages[0].content+='\nORAL: Samples group actual transcripts by question difficulty, not fixed written tasks. Empty groups were not tested. Oral steps describe progression, not CEFR scores; never map the highest question to a level. Estimate from independent answers only; a name is insufficient. Ignore uncertain recognition. Start summary with strengths. Match interview tasks to the actual questions and demonstrated ability; do not require advanced evidence from simple questions.';
-   if(evaluation)body.max_completion_tokens=kind==='diagnosis'?3600:2600;
+   if(evaluation)body.max_completion_tokens=kind==='diagnosis'?6000:2600;
    for(let attempt=0;attempt<(evaluation?2:1);attempt++){
    const serialized=JSON.stringify(body);
    // Input bytes are bounded before reservation; schema/system text are included.

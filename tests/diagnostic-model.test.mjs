@@ -9,7 +9,9 @@ const payload={profile:input.profile,samples:input.samples,scores:scoreTasks(inp
 test('Selected goals expand into measurable modules while retaining individual evidence and questions',()=>{
  const raw=rawResult(input,'C1'),result=validateDiagnosis(expandDiagnosis(raw,payload),input.samples);
  assert.equal(result.modules.length,7);
- assert.match(result.modules[0].masteryCheck,/Presentar tu perfil/);
+ assert.equal(result.modules[0].masteryCheck,raw.modules[0].masteryCheck);
+ assert.deepEqual(result.modules[0].steps,raw.modules[0].steps);
+ assert.deepEqual(result.modules[0].examples,raw.modules[0].examples);
  assert.equal(result.modules[0].evidenceQuote,raw.modules[0].evidenceQuote);
  assert.equal(result.modules[0].conversation,raw.modules[0].conversation);
  assert.doesNotMatch(result.priorities.join(' '),/confianza|fluidez/i);

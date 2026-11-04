@@ -10,12 +10,12 @@ export function buildConversationRoute(assessment){
  const modules=professionalModules(extendRouteModules(assessment));
  const stages=modules.map((m,index)=>{
   const count=Math.max(2,level.count-(m.orientation==='transfer'?1:0));
-  const tasks=competencySteps(m.focus,count),previousCapabilities=modules.slice(0,index).map(x=>x.title);
+  const tasks=m.steps?.length?m.steps.map(s=>({...s,criterion:s.task})):competencySteps(m.focus,count),previousCapabilities=modules.slice(0,index).map(x=>x.title);
   const role=assessment.profile?.role?.slice(0,120)||'tu puesto objetivo';
-  return {id:'stage'+index,moduleIndex:m.moduleIndex,title:m.title,objective:m.objective,orientation:m.orientation,reason:m.reason,evidence:m.evidenceQuote,focus:m.focus,adaptedFrom:m.adaptedFrom,previousCapabilities,steps:tasks.map((task,i)=>({id:`m${m.moduleIndex}s${i}`,order:order++,title:task.title,objective:`${task.criterion} Puesto: ${role}.`,criterion:i===tasks.length-1?m.masteryCheck:task.criterion,task:task.task,question:m.conversation.slice(0,500),evidence:m.evidenceQuote.slice(0,300),targetAnswers:level.answers,attempts:[],passedAt:null}))};
+  return {id:'stage'+index,moduleIndex:m.moduleIndex,title:m.title,objective:m.objective,orientation:m.orientation,reason:m.reason,evidence:m.evidenceQuote,focus:m.focus,adaptedFrom:m.adaptedFrom,previousCapabilities,steps:tasks.map((task,i)=>({id:`m${m.moduleIndex}s${i}`,order:order++,title:task.title,objective:m.steps?.length?`${m.objective} · ${task.title}`:`${task.criterion} Puesto: ${role}.`,criterion:i===tasks.length-1?m.masteryCheck:task.criterion,task:m.steps?.length?task.task:`${task.task} Specific interview scenario: ${m.conversation}`,examples:m.examples||null,question:m.conversation.slice(0,500),evidence:m.evidenceQuote.slice(0,300),targetAnswers:level.answers,attempts:[],passedAt:null}))};
  });
  if(stages.length<MIN_ROUTE_STAGES||order<MIN_ROUTE_STEPS)throw fail('La ruta necesita al menos 7 etapas de preparación.',409);
- return {revision:3,assessmentId:assessment.id,level:assessment.result.level,profile:assessment.profile,createdAt:Date.now(),stages};
+ return {revision:4,assessmentId:assessment.id,level:assessment.result.level,profile:assessment.profile,createdAt:Date.now(),stages};
 }
 const allSteps=route=>route.stages.flatMap(stage=>stage.steps);
 export const routeAttemptKey=(uid,id)=>`route-attempt:${encodeURIComponent(uid)}:${id}`;
@@ -89,7 +89,7 @@ export class ConversationRouteService{
   const stage=route.stages.find(s=>s.steps.includes(step));
   // Borrow the next small objective without registering or approving a route attempt.
   return {focusedPractice:true,assessmentId:route.assessmentId,moduleIndex:stage.moduleIndex,
-   level:route.level,title:step.title,objective:step.objective,criterion:step.criterion,
+   level:route.level,title:step.title,objective:step.objective,criterion:step.criterion,examples:step.examples||null,
    task:step.task,language:LEVELS[route.level].language,priorCapabilities:stage.previousCapabilities,
    targetAnswers:Math.min(step.targetAnswers,4),conversation:step.question};
  }
@@ -112,7 +112,7 @@ export class ConversationRouteService{
    const variations=['una experiencia propia distinta','una situación con otra persona del equipo','una explicación para un reclutador que desconoce tu trabajo','una situación con una restricción o necesidad diferente'];
    const previous=last?await tx.get(this.sessions.key(uid,last.id)):null;
    const priorCapabilities=route.stages.find(s=>s.steps.some(x=>x.id===step.id)).previousCapabilities||[];
-   const context={routeStep:true,priorCapabilities,routeId:route.assessmentId,stepId:step.id,assessmentId:route.assessmentId,moduleIndex:route.stages.find(s=>s.steps.some(x=>x.id===step.id)).moduleIndex,level:route.level,title:step.title,objective:step.objective,criterion:step.criterion,conversation:step.question,task:step.task,evidence:step.evidence,targetAnswers:step.targetAnswers,language:LEVELS[route.level].language,attempt:round,scenario:variations[(round-1)%variations.length],retryFocus:last?.reason?.slice(0,300)||'',avoidQuestions:previous?.messages.filter(m=>m.role==='assistant').slice(-2).map(m=>m.content.slice(0,120))||[]};
+   const context={routeStep:true,priorCapabilities,routeId:route.assessmentId,stepId:step.id,assessmentId:route.assessmentId,moduleIndex:route.stages.find(s=>s.steps.some(x=>x.id===step.id)).moduleIndex,level:route.level,title:step.title,objective:step.objective,criterion:step.criterion,examples:step.examples||null,conversation:step.question,task:step.task,evidence:step.evidence,targetAnswers:step.targetAnswers,language:LEVELS[route.level].language,attempt:round,scenario:variations[(round-1)%variations.length],retryFocus:last?.reason?.slice(0,300)||'',avoidQuestions:previous?.messages.filter(m=>m.role==='assistant').slice(-2).map(m=>m.content.slice(0,120))||[]};
    await tx.put(routeAttemptKey(uid,input.id),{id:input.id,number:round,startedAt:Date.now(),score:null,passed:false,context});stored.attempts.push(input.id);await tx.put(key,a);
   });
   return {session:await this.sessions.create(uid,{id:input.id,source:'openai',mode:'tutor',purpose:'practice',profile:route.profile,routeId:route.assessmentId,stepId:step.id},verified)};
