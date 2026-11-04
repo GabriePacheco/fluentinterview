@@ -5,7 +5,7 @@ stopVoiceIO=function(){const live=realtimeVoice;realtimeVoice=null;live?.dispose
 paintVoice=function(){legacyPaintVoice();if(!voice.session||voice.session?.transport==='realtime'||realtimeVoice){if($('#voice-count'))$('#voice-count').textContent=`${voice.index} respuestas`;const note=document.querySelector('.voice-context .mini-info');if(note)note.textContent='Conversación continua. Puedes terminar cuando quieras; tu historial queda guardado.'}if(realtimeVoice&&!realtimeVoice.closed&&$('#voice-mic-state'))$('#voice-mic-state').innerHTML=icon('mic')+(realtimeVoice.paused?'Micrófono en pausa':'Micrófono activo · puedes interrumpir');};
 startVoice=async function(mode='voice',source){
  if(mode!=='voice'||(source||runtime.config?.mode)!=='openai')return legacyStartVoice(mode,source);
- if(voice.busy)return;stopVoiceSession();voice.session=null;voice.pending=null;voice.draft='';voice.error='';voice.transcript=[];voice.index=0;voice.currentPrompt='';voice.mode='voice';voice.active=true;voice.owner=window.FluentSession.user?.uid;
+ if(voice.busy)return;stopVoiceSession();voice.session=null;voice.pending=null;voice.draft='';voice.error='';voice.notice='';voice.transcript=[];voice.index=0;voice.currentPrompt='';voice.mode='voice';voice.active=true;voice.owner=window.FluentSession.user?.uid;
  const owner=voice.owner,run=++voice.run;voice.busy=true;voice.status='requesting';paintVoice();
  const valid=()=>run===voice.run&&window.FluentSession.user?.uid===owner;
  const live=new FluentRealtime(event=>{
@@ -15,7 +15,7 @@ startVoice=async function(mode='voice',source){
    voice.partial=event.items.at(-1)?.role==='user'&&!event.items.at(-1)?.final?event.items.at(-1).text:'';
   }else if(['listening','speaking','thinking','paused'].includes(event.type)){voice.status=event.type;voice.paused=event.type==='paused';voice.active=!voice.paused;voice.busy=false}
   else if(event.type==='error')voice.error=event.message;
-  else if(event.type==='notice')voice.error=event.message;
+  else if(event.type==='notice')voice.notice=event.message;
   else if(event.type==='closed'){
    if(voice.session&&!event.completed)suppressedConversationReviews.add(voice.session.id);
    voice.busy=false;voice.active=false;voice.status=voice.session?'complete':'error';if(event.message)voice.error=event.message;

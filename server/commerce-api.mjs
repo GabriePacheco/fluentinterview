@@ -5,7 +5,7 @@ export async function commerceRequest(service,path,method,input,user){
  if(path==='/api/billing'&&method==='GET')return service.state(user);
  if(path==='/api/admin'){if(method==='GET')return service.dashboard(user);if(method==='POST')return service.administer(user,input)}
  if(method==='POST'){
-  if(path==='/api/billing/checkout')return service.checkout(user);
+  if(path==='/api/billing/checkout')return service.checkout(user,input.planId||'pro');
   if(path==='/api/billing/portal')return service.sync(user,{portal:true});
   if(path==='/api/billing/sync')return service.sync(user);
   if(path==='/api/billing/cancel'){if(input.confirm!==true)throw fail('Confirma la cancelación.');return service.sync(user,{cancel:true})}

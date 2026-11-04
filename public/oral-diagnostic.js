@@ -54,7 +54,7 @@ function pollOralResult(id,token,owner,until=Date.now()+150000){
 function oralResultCard(){
  const a=oralDiagnostic.result;if(!a)return `<section class="card"><h2>Tu ruta personalizada</h2><p role="status">${escapeHTML(oralDiagnostic.error||'Preparando tu punto de partida…')}</p>${button('oral-recover','Recuperar resultado guardado','btn secondary')}</section>`;
  if(a.status==='pending')return evaluationLoading('Estamos preparando tu ruta.','Adaptamos los siguientes pasos a la evidencia de tu entrevista.');
- if(a.status!=='completed')return `<section class="card"><h2>${a.status==='insufficient'?'Necesitamos un poco más de conversación':'Tu diagnóstico puede recuperarse'}</h2><p>${escapeHTML(a.result?.summary||a.error||'Tus respuestas están guardadas.')}</p><p>Tu ruta anterior se conserva.</p>${a.status==='failed'?button('oral-retry','Evaluar mi diagnóstico guardado','btn')+`<details><summary>Detalles para soporte</summary><p>Código: ${escapeHTML(a.failure?.code||'legacy_unknown')} · Referencia: ${escapeHTML(a.id)}</p></details>`:button('learn-new','Hacer otro diagnóstico oral','btn secondary')}</section>`;
+ if(a.status!=='completed')return `<section class="card"><h2>${a.status==='insufficient'?'Necesitamos un poco más de conversación':'Tu diagnóstico puede recuperarse'}</h2><p>${escapeHTML(a.failure?.code==='quota_limit'&&commerce.data?.initialDiagnosticIncluded?'Tu diagnóstico inicial está incluido. Ya puedes evaluar las respuestas guardadas para obtener tu primera ruta.':a.result?.summary||a.error||'Tus respuestas están guardadas.')}</p>${learning.current?'<p>Tu ruta anterior se conserva.</p>':'<p>Conservamos tus respuestas para preparar tu primera ruta.</p>'}${a.status==='failed'?button('oral-retry','Evaluar mi diagnóstico guardado','btn')+`<details><summary>Detalles para soporte</summary><p>Código: ${escapeHTML(a.failure?.code||'legacy_unknown')} · Referencia: ${escapeHTML(a.id)}</p></details>`:button('learn-new','Hacer otro diagnóstico oral','btn secondary')}</section>`;
  return `<section class="card"><span class="tag">RUTA PERSONALIZADA LISTA</span><h2>Tu punto de partida: ${escapeHTML(a.result.level)}</h2><p>${escapeHTML(a.result.summary)}</p><p>${escapeHTML(a.result.changeReason)}</p><ol>${a.result.modules.map(m=>`<li><strong>${escapeHTML(m.title)}</strong> — ${escapeHTML(m.reason)}</li>`).join('')}</ol>${button('oral-route','Ver mi ruta','btn','route')}<p class="mini-info">Estimación orientativa de la expresión observada. La nota de la conversación describe esta práctica; el diagnóstico no se aprueba ni se reprueba.</p></section>`;
 }
 const reviewBeforeDiagnostic=reviewView;
@@ -70,3 +70,23 @@ document.addEventListener('click',event=>{const action=event.target.closest('[da
 });
 window.addEventListener('hashchange',()=>{if(current()!=='resultado')clearTimeout(oralDiagnostic.timer);if(current()!=='diagnostico')oralDiagnostic.active=false});
 window.addEventListener('fluent-auth-cleared',()=>{clearTimeout(oralDiagnostic.timer);oralDiagnostic.attempts.clear();Object.assign(oralDiagnostic,{active:false,result:null,error:''})});
+
+// Announce only a successful initial diagnosis, once both route and score exist.
+const initialResultAnnouncements=new Set();
+function announceInitialResult(){
+ const session=school.reviewSession,assessment=oralDiagnostic.result,score=school.review?.result?.scoring?.score,owner=window.FluentSession?.user?.uid;
+ if(current()!=='resultado'||!owner||session?.purpose!=='diagnostic'||session.initialDiagnosticIncluded!==true||assessment?.status!=='completed'||!assessment.result?.modules?.length||!Number.isFinite(score))return;
+ const key=owner+':'+session.id;
+ if(initialResultAnnouncements.has(key))return;
+ initialResultAnnouncements.add(key);
+ const dialog=document.createElement('dialog');dialog.className='initial-result-modal';dialog.setAttribute('aria-labelledby','initial-result-title');
+ const shownScore=score.toLocaleString('es-EC',{minimumFractionDigits:1,maximumFractionDigits:2});
+ dialog.innerHTML=`<span class="eyebrow">TU CALIFICACIÓN</span><div class="initial-result-score" style="--score:${Math.max(0,Math.min(100,score*10))}%"><span><strong>${shownScore}</strong><small>/ 10</small></span></div><h2 id="initial-result-title">Tu ruta está lista</h2><p>Ya tienes un punto de partida y un plan de preparación personalizado.</p><div class="initial-result-actions"><button type="button" class="btn secondary" data-initial-result="feedback">Ver retroalimentación</button><button type="button" class="btn" data-initial-result="route">Ver tu ruta</button></div>`;
+ dialog.addEventListener('click',event=>{const choice=event.target.closest('[data-initial-result]')?.dataset.initialResult;if(!choice)return;dialog.close();if(choice==='route'){learning.routePreview=assessment;go('ruta')}else window.scrollTo({top:0,behavior:'smooth'})});
+ dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();
+}
+const reviewBeforeInitialAnnouncement=reviewView;
+reviewView=function(){const html=reviewBeforeInitialAnnouncement();queueMicrotask(announceInitialResult);return html};
+views.resultado=reviewView;
+window.addEventListener('fluent-auth-cleared',()=>{document.querySelector('.initial-result-modal')?.remove();initialResultAnnouncements.clear()});
+window.addEventListener('hashchange',()=>{if(current()!=='resultado')document.querySelector('.initial-result-modal')?.remove()});

@@ -57,6 +57,8 @@ export class RealtimeRelay{
  start(){
   this.timer=setTimeout(()=>this.close('Terminó el tiempo de esta sesión. Tu conversación está guardada; puedes iniciar otra.'),this.policy.seconds*1000);
   this.warningTimer=setTimeout(()=>this.client({type:'fluent.notice',message:'Queda un minuto en esta sesión. Al terminar podrás iniciar otra conversación.'}),Math.max(0,this.policy.seconds-60)*1000);
+  this.monthlyWarningTimers=[];
+  if(Number.isFinite(this.policy.monthlyRemainingBefore))for(const threshold of [600,180])if(this.policy.monthlyRemainingBefore>=threshold)this.monthlyWarningTimers.push(setTimeout(()=>this.client({type:'fluent.notice',message:threshold===600?'Te quedan aproximadamente 10 minutos de conversación este mes.':'Te quedan aproximadamente 3 minutos de conversación este mes.'}),Math.max(0,(this.policy.monthlyRemainingBefore-threshold)*1000)));
   this.farewellTimer=setTimeout(()=>this.scheduleFarewell(),Math.max(0,this.policy.seconds-(this.session.diagnostic?45:15))*1000);
   this.upstream.addEventListener('message',e=>{try{this.event(JSON.parse(e.data))}catch{this.close('La conexión de voz se interrumpió.')}});
   this.downstream.addEventListener('message',e=>{try{this.input(JSON.parse(e.data))}catch{this.close('No pudimos continuar con el audio.')}});
@@ -245,7 +247,7 @@ export class RealtimeRelay{
  }
  async close(message='',completed=false){
   if(this.closed||this.closing)return this.closeTask;
-  this.closing=true;clearTimeout(this.timer);clearTimeout(this.warningTimer);clearTimeout(this.farewellTimer);
+  this.closing=true;clearTimeout(this.timer);clearTimeout(this.warningTimer);clearTimeout(this.farewellTimer);for(const timer of this.monthlyWarningTimers||[])clearTimeout(timer);
   this.closeTask=this.finishClose(message,completed);return this.closeTask;
  }
  async finishClose(message,completed){
@@ -267,6 +269,7 @@ export class RealtimeService{
   if(!verified)throw fail('Confirma tu correo para conversar con IA.',403);
   await this.owner.commerce.guard(uid);
   const s=await this.owner.sessions.get(uid,id);
+  await this.owner.commerce.authorizeSession?.(uid,{id:s.id,purpose:s.purpose},this.storage);
   if(s.source!=='openai'||s.status!=='active'||s.messages.length||s.transport)throw fail('Inicia una nueva conversación para usar la voz.',409);
   const ticket=crypto.randomUUID()+crypto.randomUUID();
   await this.storage.put('realtime-ticket:'+uid,{ticket,id,expires:Date.now()+30000});
@@ -275,6 +278,7 @@ export class RealtimeService{
  async reserveResponse(uid,diagnostic=false){
   await this.storage.transaction(async tx=>{
    const account=await tx.get(this.owner.commerce.key(uid));if(account?.deleted||account?.suspended||(await tx.get('commerce-settings'))?.aiPaused)throw fail('La práctica está pausada.',403);
+   if(!diagnostic)await this.owner.commerce.requirePractice(uid,tx);
    const policy=await this.owner.commerce.policy?.(uid,tx)||{development:true,ledgerKey:'ledger'};
    const data=await tx.get(policy.ledgerKey)||{reserved:0,attempts:0,usageEstimate:0},limit=Number(this.owner.env.AI_BUDGET_USD||0);
    const reserve=diagnostic?REALTIME_RESPONSE_RESERVE*2:REALTIME_RESPONSE_RESERVE;
@@ -285,7 +289,7 @@ export class RealtimeService{
  async connect(request){
   const url=new URL(request.url),uid=url.searchParams.get('uid'),ticket=url.searchParams.get('ticket');
   if(request.headers.get('upgrade')?.toLowerCase()!=='websocket'||!uid||!ticket)throw fail('Conexión no válida.',400);
-  let session,policy;const leaseKey='realtime-lease:'+encodeURIComponent(uid);
+  let session,policy,minutesReservation;const leaseKey='realtime-lease:'+encodeURIComponent(uid);
   await this.storage.transaction(async tx=>{
    const key='realtime-ticket:'+uid,t=await tx.get(key);
    if(!t||t.ticket!==ticket||t.expires<Date.now())throw fail('La conexión caducó. Inicia otra conversación.',401);
@@ -294,8 +298,12 @@ export class RealtimeService{
    const lease=await tx.get(leaseKey);if(lease?.until>Date.now())throw fail('Ya tienes una conversación de voz abierta. Termínala antes de iniciar otra.',409);
    session=await tx.get(this.owner.sessions.key(uid,t.id));
    if(!session||session.status!=='active'||session.messages.length||session.transport)throw fail('Conversación no disponible.',409);
-   const quota=await this.owner.commerce.reserve(tx,uid,'openai');
+   await this.owner.commerce.authorizeSession?.(uid,{id:session.id,purpose:session.purpose},tx);
+   minutesReservation=await this.owner.commerce.reserveMinutes(tx,uid,session,{diagnostic:!!session.diagnostic});
+   const quota=await this.owner.commerce.reserve(tx,uid,'openai',{kind:'voice',sessionId:session.id});
    policy=await this.owner.commerce.policy?.(uid,tx)||{development:true,ledgerKey:'ledger',seconds:REALTIME_SECONDS,maxResponses:REALTIME_RESPONSES,maxSegments:20};
+   if(session.initialDiagnosticIncluded)policy={...policy,seconds:600};
+   if(minutesReservation){policy={...policy,seconds:Math.min(policy.seconds,minutesReservation.seconds)};if(!minutesReservation.unlimited)policy.monthlyRemainingBefore=minutesReservation.remainingBefore}
    if(session.practiceGoal)policy={...policy,seconds:Math.min(policy.seconds,session.practiceGoal.maxSeconds)};
    const data=await tx.get(policy.ledgerKey)||{reserved:0,attempts:0,usageEstimate:0};
    const limit=Number(this.owner.env.AI_BUDGET_USD||0);
@@ -317,10 +325,10 @@ export class RealtimeService{
     authorize:()=>this.reserveResponse(uid,!!session.diagnostic),
     save:(messages,diagnostic)=>this.storage.transaction(async tx=>{const key=this.owner.sessions.key(uid,session.id),s=await tx.get(key);if(s){s.voiceStartedAt??=relay.started;s.messages=messages;if(diagnostic)s.diagnostic=diagnostic;s.updatedAt=Date.now();await tx.put(key,s)}}),
     usage:(usage,meta)=>this.storage.transaction(async tx=>{const measured=await recordOpenAIUsage(tx,{...meta,usage,uid,startedAt:relay.started,sessionId:session.id,scope:policy.development?'development':policy.plan==='owner'?'owner':'users'});const l=await tx.get(policy.ledgerKey);if(l&&measured){l.usageEstimate+=measured.estimatedUsd;await tx.put(policy.ledgerKey,l)}}),
-    onClose:async reason=>{this.active.delete(uid);await this.storage.transaction(async tx=>{const endedAt=Date.now();await finishUsageSession(tx,{uid,sessionId:session.id,startedAt:relay.started,endedAt});const key=this.owner.sessions.key(uid,session.id),s=await tx.get(key);if(s){s.voiceStartedAt=relay.started;s.voiceDurationSeconds=(endedAt-relay.started)/1000;s.status='completed';s.endReason=reason;s.updatedAt=Date.now();await tx.put(key,s)}const lease=await tx.get(leaseKey);if(lease?.id===session.id)await tx.delete(leaseKey)})}});
+    onClose:async reason=>{this.active.delete(uid);await this.storage.transaction(async tx=>{const endedAt=Date.now();await finishUsageSession(tx,{uid,sessionId:session.id,startedAt:relay.started,endedAt});const key=this.owner.sessions.key(uid,session.id),s=await tx.get(key);if(s){s.voiceStartedAt=relay.started;s.voiceDurationSeconds=(endedAt-relay.started)/1000;s.status='completed';s.endReason=reason;s.updatedAt=Date.now();await tx.put(key,s)}const lease=await tx.get(leaseKey);if(lease?.id===session.id)await tx.delete(leaseKey)});if(minutesReservation&&!minutesReservation.unlimited)await this.owner.commerce.settleMinutes(uid,session.id,relay.started,Date.now(),false,minutesReservation.period)}});
    stage='start';this.active.set(uid,relay);relay.start();
    return new Response(null,{status:101,webSocket:pair[0]});
-  }catch(error){await this.storage.delete(leaseKey);await this.owner.sessions.end(uid,session.id);error.realtimeDetail??=stage+'_'+error.name;throw error}
+  }catch(error){await this.storage.delete(leaseKey);if(minutesReservation&&!minutesReservation.unlimited)await this.owner.commerce.settleMinutes(uid,session.id,session.createdAt,Date.now(),true,minutesReservation.period);await this.owner.sessions.end(uid,session.id);error.realtimeDetail??=stage+'_'+error.name;throw error}
  }
  async stop(uid){await this.active.get(uid)?.close()}
 }

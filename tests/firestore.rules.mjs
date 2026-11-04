@@ -17,6 +17,11 @@ test('Firestore enforces profile ownership, schema and server-only entitlements'
   await assertFails(updateDoc(doc(alice,'fi_users/alice'),{admin:true,updatedAt:serverTimestamp()}));
   await assertFails(updateDoc(doc(alice,'fi_users/alice'),{name:'x'.repeat(61),updatedAt:serverTimestamp()}));
   await assertSucceeds(updateDoc(doc(alice,'fi_users/alice'),{role:'Data Analyst',updatedAt:serverTimestamp()}));
+  await assertSucceeds(updateDoc(doc(alice,'fi_users/alice'),{profession:'Analyst',targetRoles:['Data Analyst','BI Analyst'],selfReportedLevel:'C1',onboardingCompleted:true,updatedAt:serverTimestamp()}));
+  await assertFails(updateDoc(doc(alice,'fi_users/alice'),{selfReportedLevel:'invented',updatedAt:serverTimestamp()}));
+  await assertFails(updateDoc(doc(alice,'fi_users/alice'),{targetRoles:['a','b','c','d','e','f'],updatedAt:serverTimestamp()}));
+  await assertFails(updateDoc(doc(alice,'fi_users/alice'),{profession:'',updatedAt:serverTimestamp()}));
+  await assertFails(updateDoc(doc(alice,'fi_users/alice'),{level:'C1',updatedAt:serverTimestamp()}));
   await assertFails(setDoc(doc(alice,'fi_entitlements/alice'),{plan:'pro'}));
   await assertFails(getDoc(doc(bob,'fi_entitlements/alice')));
   await assertFails(setDoc(doc(alice,'fi_users/alice/routes/fake'),{level:'C1'}));

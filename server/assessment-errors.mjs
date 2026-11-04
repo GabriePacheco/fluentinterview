@@ -12,6 +12,7 @@ const causes=new Map([
  ['Un módulo no está respaldado por tus respuestas.',['invalid_quote','La IA incluyó una cita que no coincide con tus respuestas originales.']],
  ['Una evidencia insuficiente no debe crear una ruta.',['inconsistent_result','La IA indicó que faltaba evidencia, pero también propuso una ruta. No guardamos ese resultado contradictorio.']],
  ['El diagnóstico no incluye evidencia y módulos suficientes.',['incomplete_route','La IA no incluyó todos los elementos necesarios para justificar tu ruta.']],
+ ['El diagnóstico no incluye evidencia y al menos 7 etapas.',['incomplete_route','La IA debe incluir evidencia suficiente y al menos 7 etapas para justificar tu ruta.']],
  ['Los objetivos exceden la longitud admitida.',['oversized_result','La IA devolvió objetivos demasiado extensos para esta evaluación.']],
  ['La ruta contiene módulos repetidos.',['duplicate_modules','La IA repitió objetivos en la ruta.']],
  ['La IA no devolvió un resultado completo. No se reintentó automáticamente.',['incomplete_response','La IA no devolvió una evaluación completa.']],

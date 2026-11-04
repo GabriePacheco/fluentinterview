@@ -1,6 +1,6 @@
 // Local development bridge. Real AI is enabled only by the server configuration.
 const runtime={config:null,error:'',plan:null,planSource:null,busy:false};
-const profileForAI=()=>({name:state.name,role:state.role,goal:state.goal,minutes:state.minutes,experience:(state.experience||'').slice(0,1200),job:(state.job||'').slice(0,1200)});
+const profileForAI=()=>({name:state.name,role:state.role,profession:state.profession||'',goal:state.goal,minutes:state.minutes,experience:(state.experience||'').slice(0,1200),job:(state.job||'').slice(0,1200)});
 async function apiCall(path,input,method='POST'){
  const token=await window.FluentSession.token();
  let response;

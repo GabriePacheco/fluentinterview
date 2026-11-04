@@ -28,9 +28,9 @@ test('Four-stage saved route expands to seven preserving original steps, attempt
  assert.equal(weeklyPlan(saved.result,saved.profile)[6].moduleIndex,6);
 });
 
-test('New diagnoses require seven distinct stages; insufficient evidence still creates none',()=>{
+test('Short valid diagnoses are expanded to seven distinct stages; insufficient evidence still creates none',()=>{
  const input=draft(crypto.randomUUID(),'advanced'),raw=rawResult(input);
  assert.equal(validateDiagnosis(expandDiagnosis(raw,input),input.samples).modules.length,7);
- raw.modules=raw.modules.slice(0,4);assert.throws(()=>validateDiagnosis(expandDiagnosis(raw,input),input.samples),/7 etapas/);
+ raw.modules=raw.modules.slice(0,4);const expanded=validateDiagnosis(expandDiagnosis(raw,input),input.samples);assert.equal(expanded.modules.length,7);assert.equal(new Set(expanded.modules.map(m=>m.focus)).size,7);
  raw.level='insufficient_evidence';raw.modules=[];assert.equal(validateDiagnosis(expandDiagnosis(raw,input),input.samples).modules.length,0);
 });

@@ -37,16 +37,16 @@ export function createApplication(options={}){
  const storage=new LocalSessionStorage(options.directory||path.join(root,'.local'));
  const commerce=new CommerceService(storage,{env:options.commerceEnv||process.env,client:options.lemonClient,budget:async()=>ledger.snapshot()});
  const run=async(kind,source,input,{uid,sessionId})=>{
-  const scopedLedger={snapshot:()=>ledger.snapshot(),recordUsage:async(u,meta)=>{ledger.recordUsage(u);const policy=await commerce.policy(uid);await storage.transaction(tx=>recordOpenAIUsage(tx,{...meta,usage:u,sessionId,uid,scope:policy.development?'development':uid===commerce.env.ADMIN_UID?'owner':'users'}))},reserve:()=>commerce.consume(uid,source,()=>ledger.reserve())};
+  const scopedLedger={snapshot:()=>ledger.snapshot(),recordUsage:async(u,meta)=>{ledger.recordUsage(u);const policy=await commerce.policy(uid);await storage.transaction(tx=>recordOpenAIUsage(tx,{...meta,usage:u,sessionId,uid,scope:policy.development?'development':uid===commerce.env.ADMIN_UID?'owner':'users'}))},reserve:async()=>{const policy=await commerce.policy(uid);return commerce.consume(uid,source,policy.development?()=>ledger.reserve():undefined,{kind,sessionId})}};
   if(source==='mock')await commerce.consume(uid,source);
   try{return await createAI({mode:source,apiKey:options.apiKey??process.env.OPENAI_API_KEY??'',ledger:scopedLedger,fetchImpl:options.fetchImpl}).run(kind,input)}catch(error){await commerce.audit('ai_failed',uid,String(error.status||500));throw error}
  };
- const sessions=new SessionService(storage,{source:ai.mode,budget:()=>ledger.snapshot(),run:(source,input,context)=>run('conversation',source,{...input,messages:input.messages.slice(-8).map(m=>({...m,content:m.content.slice(0,1000)}))},context)});
+ const sessions=new SessionService(storage,{source:ai.mode,budget:()=>ledger.snapshot(),authorizeSession:(uid,input,tx)=>commerce.authorizeSession(uid,input,tx),authorizePractice:(uid,tx)=>commerce.requirePractice(uid,tx),run:(source,input,context)=>run('conversation',source,{...input,messages:input.messages.slice(-8).map(m=>({...m,content:m.content.slice(0,1000)}))},context)});
  const assessments=new AssessmentService(storage,{source:ai.mode,budget:()=>ledger.snapshot(),run:(source,input,context)=>run('diagnosis',source,input,context)});
  sessions.learning=(uid,input)=>assessments.context(uid,input);
  const study=new StudyService(storage,{assessments});
  assessments.sessionFor=(uid,id)=>sessions.get(uid,id);
- const routes=new ConversationRouteService(storage,{assessments,sessions});
+ const routes=new ConversationRouteService(storage,{assessments,sessions,requirePractice:uid=>commerce.requirePractice(uid)});
  sessions.learning=(uid,input)=>input.routeId?routes.context(uid,input):input.studyId?study.context(uid,input.studyId):routes.practiceContext(uid,input);
  const feedback=new FeedbackService(storage,{source:ai.mode,budget:()=>ledger.snapshot(),evidence:(uid,kind,id)=>kind==='activity'?study.evidence(uid,id):sessions.evidence(uid,id),run:(source,input,context)=>run('review',source,input,context)});
  study.reviewFor=(uid,id)=>feedback.get(uid,'activity',id);

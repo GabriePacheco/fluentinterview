@@ -14,7 +14,7 @@ export function sessionSummary(s){
 }
 function publicSession(s){const {requests,pending,blocked,...safe}=s;const hidden=s.mode==='interview'&&s.status!=='completed';return {...safe,feedback:hidden?[]:s.feedback,turnCount:s.feedback.length,pending:!!pending,blocked:!!blocked,summary:hidden?{label:'Entrevista en curso',learnerTurns:s.messages.filter(m=>m.role==='user').length,focus:[],quotes:[],suggestion:'Revisarás las observaciones al terminar.',level:null,pronunciationEvaluated:false}:sessionSummary(s),maxTurns:s.practiceGoal?.targetAnswers||MAX_TURNS}}
 export class SessionService{
- constructor(storage,{run,source='mock',budget,learning}){this.storage=storage;this.run=run;this.source=source;this.budget=budget;this.learning=learning;this.inflight=new Map()}
+ constructor(storage,{run,source='mock',budget,learning,authorizeSession,authorizePractice}){this.storage=storage;this.run=run;this.source=source;this.budget=budget;this.learning=learning;this.authorizeSession=authorizeSession;this.authorizePractice=authorizePractice;this.inflight=new Map()}
  prefix(uid){return `sessions:${encodeURIComponent(uid)}:`}
  async evidence(uid,id){
   const s=await this.get(uid,id);if(s.status!=='completed')throw fail('Finaliza la conversación antes de solicitar su revisión.',409);
@@ -37,11 +37,12 @@ export class SessionService{
   const diagnostic=input.purpose==='diagnostic';
   if(diagnostic&&source!=='openai')throw fail('El diagnóstico conversacional requiere IA.',400);
   const learning=diagnostic?null:await this.learning?.(uid,input)||null;
-  const key=this.key(uid,id),indexKey=`session-index:${encodeURIComponent(uid)}`;
+ const key=this.key(uid,id),indexKey=`session-index:${encodeURIComponent(uid)}`;
   return this.storage.transaction(async tx=>{
    const existing=await tx.get(key);if(existing)return publicSession(existing);
+   const access=await this.authorizeSession?.(uid,{...input,id,purpose:diagnostic?'diagnostic':'practice'},tx);
    const ids=await tx.get(indexKey)||[];
-   const s={id,source,profile,learning,mode:input.mode==='interview'?'interview':'tutor',purpose:input.purpose==='interview'?'interview':'practice',interviewType:['screening','behavioral','project'].includes(input.interviewType)?input.interviewType:'screening',status:'active',createdAt:Date.now(),updatedAt:Date.now(),messages:[],feedback:[],requests:{},pending:null,blocked:false};
+   const s={id,source,profile,learning,mode:input.mode==='interview'?'interview':'tutor',purpose:input.purpose==='interview'?'interview':'practice',initialDiagnosticIncluded:access?.initialIncluded===true,interviewType:['screening','behavioral','project'].includes(input.interviewType)?input.interviewType:'screening',status:'active',createdAt:Date.now(),updatedAt:Date.now(),messages:[],feedback:[],requests:{},pending:null,blocked:false};
    if(diagnostic){s.purpose='diagnostic';s.mode='interview';s.diagnostic=newOralDiagnostic()}
    s.practiceGoal=buildPracticeGoal(s);
    await tx.put(key,s);await tx.put(indexKey,[id,...ids]);return publicSession(s);
@@ -65,6 +66,7 @@ export class SessionService{
  async perform(uid,key,input,canUseReal){
   const cached=await this.storage.transaction(async tx=>{
    const s=await tx.get(key);if(!s)throw fail('Sesión no encontrada.',404);
+   if(s.purpose!=='diagnostic')await this.authorizePractice?.(uid,tx);
    if(s.source==='openai'&&!canUseReal)throw fail('Confirma tu correo antes de continuar.',403);
    if(s.transport==='realtime')throw fail('Esta conversación usa voz en tiempo real. Finalízala antes de iniciar otra práctica por escrito.',409);
    if(s.purpose==='diagnostic')throw fail('Inicia este diagnóstico con voz o utiliza el diagnóstico escrito.',409);

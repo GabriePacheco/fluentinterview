@@ -53,7 +53,7 @@ export function competencySteps(focus,count){
 export function extendRouteModules(assessment){
  const original=assessment.result.modules;
  if(original.length>=MIN_ROUTE_STAGES)return original;
- if(original.length<4)throw Error('La ruta necesita al menos 7 etapas y un diagnóstico completo.');
+ if(!original.length)throw Error('La ruta necesita evidencia de diagnóstico para poder prepararse.');
  const modules=professionalModules(original).sort((a,b)=>a.moduleIndex-b.moduleIndex);
  if(!modules.length)return original;
  const used=new Set(modules.map(m=>m.focus));

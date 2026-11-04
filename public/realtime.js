@@ -37,7 +37,7 @@
    if(this.closed)return;
    if(e.type==='fluent.ready'){this.ready=true;this.emit('listening');return}
    if(e.type==='fluent.notice'){this.emit('notice',{message:e.message});return}
-   if(e.type==='fluent.closed'){this.finishAfterPlayback(e.message,e.completed===true);return}
+   if(e.type==='fluent.closed'){this.finishAfterPlayback(e.message,e.completed===true);window.dispatchEvent(new Event('fluent-conversation-closed'));return}
    if(this.requestedEnd&&['input_audio_buffer.speech_started','input_audio_buffer.speech_stopped'].includes(e.type))return;
    if(e.type==='response.created'){this.activeResponse=e.response.id;if(this.userSpeaking||this.paused)this.interrupt();}
    if(e.type==='response.output_item.added'&&e.item?.role==='assistant')this.playback.item(e.item.id,e.response_id);

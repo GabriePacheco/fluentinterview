@@ -8,7 +8,8 @@ export function createTokenVerifier(projectId,keys=googleKeys){
    const {payload}=await jwtVerify(header.slice(7),keys,{algorithms:['RS256'],issuer:`https://securetoken.google.com/${projectId}`,audience:projectId,requiredClaims:['exp','iat','sub','auth_time'],clockTolerance:5});
    const now=Math.floor(Date.now()/1000);
    if(typeof payload.sub!=='string'||!payload.sub||payload.sub.length>128||payload.sub.includes('/')||typeof payload.auth_time!=='number'||payload.auth_time>now+5||payload.iat>now+5)throw Error();
-   return {uid:payload.sub,emailVerified:payload.email_verified===true,...(typeof payload.email==='string'?{email:payload.email}:{}),authTime:payload.auth_time};
+   // Only the verified Firebase JWT can establish Google sign-in, never client profile fields.
+   return {uid:payload.sub,emailVerified:payload.email_verified===true||payload.firebase?.sign_in_provider==='google.com',...(typeof payload.email==='string'?{email:payload.email}:{}),authTime:payload.auth_time};
   }catch{throw unauthorized()}
  };
 }

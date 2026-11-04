@@ -5,6 +5,7 @@ import {assessmentFailure} from './assessment-errors.mjs';
 import {oralSamples} from './oral-diagnostic.mjs';
 import {routeAttemptKey} from './conversation-route.mjs';
 import {EVALUATION_PENDING_MS,retryEvaluation} from './evaluation-policy.mjs';
+import {initialRouteKey} from './diagnostic-access.mjs';
 const UUID=/^[a-f0-9-]{36}$/i;
 function cleanDraft(input){
  if(input.catalogRevision!==REVISION)throw fail('El diagnóstico cambió. Recarga la página antes de continuar.',409);
@@ -70,7 +71,7 @@ export class AssessmentService{
   if(s.source==='openai')validateDiagnosis(result,s.samples);
   const assessment=await this.storage.transaction(async tx=>{const current=await tx.get(key),index=await tx.get(this.index(uid));if(current?.status!=='pending'||index.pending!==id)throw fail('La evaluación ya no está activa.',409);
    current.result=result;current.status=!enough||result.level==='insufficient_evidence'&&s.source==='openai'?'insufficient':s.source==='mock'?'mock':'completed';current.week=weeklyPlan(result,s.profile);current.updatedAt=Date.now();current.experimental=true;current.pronunciationEvaluated=false;current.expressionBasis='Texto o transcripción revisada, no fluidez oral';index.pending=null;
-   if(current.status==='completed'){index.sequence++;current.version=index.sequence;index.current=id}else current.version=null;
+   if(current.status==='completed'){index.sequence++;current.version=index.sequence;index.current=id;if(!await tx.get(initialRouteKey(uid)))await tx.put(initialRouteKey(uid),{assessmentId:id,completedAt:current.updatedAt})}else current.version=null;
    if(s.format==='oral-v1'){current.scores=s.scores;current.expressionBasis='Contenido de la conversación transcrita; nivel orientativo, sin medir pronunciación.'}
    await tx.put(key,current);await tx.put(this.index(uid),index);return current;
   });return {assessment,budget:await this.budget(),replayed:false};

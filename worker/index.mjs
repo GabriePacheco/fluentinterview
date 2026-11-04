@@ -20,15 +20,15 @@ export class BudgetCoordinator {
   this.commerce=new CommerceService(this.storage,{env,budget:ledger.snapshot});
   const run=async(kind,source,input,{uid,sessionId})=>{
    if(source==='openai'&&env.AI_MODE!=='openai')throw fail('La IA está pausada.',503);
-   const scopedLedger={...ledger,reserve:()=>op('/reserve',{uid,quota:true}),recordUsage:(usage,meta)=>op('/usage',{uid,quota:true,usage,meta:{...meta,sessionId}})};
+   const scopedLedger={...ledger,reserve:()=>op('/reserve',{uid,quota:true,context:{kind,sessionId}}),recordUsage:(usage,meta)=>op('/usage',{uid,quota:true,usage,meta:{...meta,sessionId}})};
    if(source==='mock')await this.commerce.consume(uid,source);
    try{return await createAI({mode:source,apiKey:env.OPENAI_API_KEY||'',model:MODEL,ledger:scopedLedger}).run(kind,input)}catch(error){await this.commerce.audit('ai_failed',uid,String(error.status||500));throw error}
   };
   this.assessments=new AssessmentService(this.storage,{source:env.AI_MODE||'mock',budget:ledger.snapshot,run:(source,input,context)=>run('diagnosis',source,input,context)});
-  this.sessions=new SessionService(this.storage,{source:env.AI_MODE||'mock',budget:ledger.snapshot,run:(source,input,context)=>run('conversation',source,{...input,messages:input.messages.slice(-8).map(m=>({...m,content:m.content.slice(0,1000)}))},context)});
+  this.sessions=new SessionService(this.storage,{source:env.AI_MODE||'mock',budget:ledger.snapshot,authorizeSession:(uid,input,tx)=>this.commerce.authorizeSession(uid,input,tx),authorizePractice:(uid,tx)=>this.commerce.requirePractice(uid,tx),run:(source,input,context)=>run('conversation',source,{...input,messages:input.messages.slice(-8).map(m=>({...m,content:m.content.slice(0,1000)}))},context)});
   this.study=new StudyService(this.storage,{assessments:this.assessments});
   this.assessments.sessionFor=(uid,id)=>this.sessions.get(uid,id);
-  this.routes=new ConversationRouteService(this.storage,{assessments:this.assessments,sessions:this.sessions});
+  this.routes=new ConversationRouteService(this.storage,{assessments:this.assessments,sessions:this.sessions,requirePractice:uid=>this.commerce.requirePractice(uid)});
   this.sessions.learning=(uid,input)=>input.routeId?this.routes.context(uid,input):input.studyId?this.study.context(uid,input.studyId):this.routes.practiceContext(uid,input);
   this.feedback=new FeedbackService(this.storage,{source:env.AI_MODE||'mock',budget:ledger.snapshot,evidence:(uid,kind,id)=>kind==='activity'?this.study.evidence(uid,id):this.sessions.evidence(uid,id),run:(source,input,context)=>run('review',source,input,context)});
   this.study.reviewFor=(uid,id)=>this.feedback.get(uid,'activity',id);
@@ -92,7 +92,7 @@ export class BudgetCoordinator {
      if(!await tx.getAlarm())await tx.setAlarm(now+120000);
     }else if(operation==='/reserve'){
      if(policy.development&&data.reserved+50000>Math.floor(limit*1e6))throw fail('Presupuesto de pruebas agotado. No se realizó la llamada.',402);
-     const quota=input.quota?await this.commerce.reserve(tx,input.uid,'openai'):null;
+     const quota=input.quota?await this.commerce.reserve(tx,input.uid,'openai',input.context):null;
      if(policy.development)data.reserved+=50000;data.attempts++;await tx.put(ledgerKey,data);if(quota)await tx.put(quota.key,quota.value);
     }else if(operation==='/usage'){
      const usage=input.usage;

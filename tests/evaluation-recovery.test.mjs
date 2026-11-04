@@ -4,6 +4,7 @@ import {createAI} from '../server/ai.mjs';
 import {AssessmentService} from '../server/assessments.mjs';
 import {FeedbackService} from '../server/feedback.mjs';
 import {sourceQuote} from '../server/evaluation-policy.mjs';
+import {assessmentFailure} from '../server/assessment-errors.mjs';
 import {draft,rawResult,validResult} from './diagnostic-fixtures.mjs';
 import {memory,routeFixture,finishAttempt} from './route-fixtures.mjs';
 
@@ -27,6 +28,32 @@ test('Ambiguous provider failures and refusals never trigger automatic paid repa
   const input=draft(crypto.randomUUID());await assert.rejects(()=>ai.run('diagnosis',{profile:input.profile,samples:input.samples}));assert.equal(calls,1);
  }
 });
+
+test('A short oral diagnosis is completed from saved evidence without an extra model call',async()=>{
+ const input=draft(crypto.randomUUID(),'beginner');input.samples[2].text='';
+ let calls=0,reservations=0;
+ const ai=createAI({mode:'openai',apiKey:'fixture',ledger:{reserve:async()=>reservations++,recordUsage:async()=>{},snapshot:async()=>({})},fetchImpl:async(_,options)=>{
+  calls++;const body=JSON.parse(options.body);assert.deepEqual(JSON.parse(body.messages[1].content).samples,input.samples);
+  const raw=rawResult(input,'A2');raw.modules.forEach((m,i)=>m.evidenceQuote=input.samples[i%2].text.slice(0,35));
+  if(calls===1)raw.modules=raw.modules.slice(0,4);
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(raw)}}],usage:{prompt_tokens:1,completion_tokens:1}});
+ }});
+ const {result}=await ai.run('diagnosis',{profile:input.profile,samples:input.samples,scores:{skills:{}},oral:{endReason:'practice_boundary'}});
+ assert.equal(result.level,'A2');assert.equal(result.modules.length,7);assert.equal(calls,1);assert.equal(reservations,1);
+});
+
+test('A short route completes instead of persisting incomplete_route and preserves answers',async()=>{
+ const input=draft(crypto.randomUUID());let calls=0;
+ const ai=createAI({mode:'openai',apiKey:'fixture',ledger:{reserve:async()=>{},recordUsage:async()=>{},snapshot:async()=>({})},fetchImpl:async()=>{
+  calls++;const raw=rawResult(input);raw.modules=raw.modules.slice(0,4);
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(raw)}}]});
+ }});
+ const service=new AssessmentService(memory(),{source:'openai',budget:async()=>({}),run:(_,data)=>ai.run('diagnosis',data)});
+ await service.save('learner',input);const {assessment}=await service.evaluate('learner',input.id,true);
+ assert.equal(assessment.status,'completed');assert.equal(assessment.result.modules.length,7);assert.deepEqual(assessment.samples,input.samples);assert.equal(calls,1);
+ assert.equal((await service.evaluate('learner',input.id,true)).replayed,true);assert.equal(calls,1);
+ assert.equal(assessmentFailure(Error('El diagnóstico no incluye evidencia y módulos suficientes.')).code,'incomplete_route');
+});
 test('Saved oral diagnosis can be reevaluated without changing samples or charging stale retries',async()=>{
  const storage=memory();let calls=0;const service=new AssessmentService(storage,{source:'openai',budget:async()=>({}),run:async(_,input)=>{calls++;if(calls===1)throw Error('La evaluación contiene una cita que no está en tus respuestas.');return {result:validResult(input)}}});
  const id=crypto.randomUUID(),input=draft(id);
@@ -40,8 +67,8 @@ test('Saved oral diagnosis can be reevaluated without changing samples or chargi
  await service.fromSession('owner',id,true,{retryAttempt:1});assert.equal(calls,2);
 });
 test('Recovered practice review updates a previously failed route attempt and preserves its pass',async()=>{
- const f=await routeFixture();await f.routes.state('alice');
- const {session}=await f.routes.start('alice',{id:crypto.randomUUID(),routeId:f.record.id,stepId:'m0s0'},true);
+ const f=await routeFixture(),{route}=await f.routes.state('alice');
+ const {session}=await f.routes.start('alice',{id:crypto.randomUUID(),routeId:f.record.id,stepId:route.nextStepId},true);
  await finishAttempt(f,session,9);const key=`feedback:alice:session:${session.id}`,good=await f.storage.get(key);
  await f.storage.put(key,{status:'failed',source:'openai',attempt:1,error:'Fallo de formato.'});await f.routes.captureReview('alice',session.id);
  let calls=0;const feedback=new FeedbackService(f.storage,{evidence:(uid,kind,id)=>f.sessions.evidence(uid,id),budget:async()=>({}),run:async()=>{calls++;return {result:good.result}}});

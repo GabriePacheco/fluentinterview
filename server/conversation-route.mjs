@@ -21,7 +21,7 @@ const allSteps=route=>route.stages.flatMap(stage=>stage.steps);
 export const routeAttemptKey=(uid,id)=>`route-attempt:${encodeURIComponent(uid)}:${id}`;
 const scoreReasons=scoring=>scoring.criteria.filter(c=>c.points<PASS_SCORE).sort((a,b)=>a.points-b.points).slice(0,2).map(c=>`${c.label}: ${c.reason}`).join(' ');
 export class ConversationRouteService{
- constructor(storage,{assessments,sessions}){Object.assign(this,{storage,assessments,sessions})}
+ constructor(storage,{assessments,sessions,requirePractice}){Object.assign(this,{storage,assessments,sessions,requirePractice})}
  async ensure(uid,id){
   const assessment=id?await this.assessments.get(uid,id):(await this.assessments.state(uid)).current;
   if(!assessment)return null;if(assessment.status!=='completed'||assessment.source!=='openai')throw fail('Completa un diagnóstico con IA para crear tu ruta.',409);
@@ -98,7 +98,7 @@ export class ConversationRouteService{
   const a=await this.storage.get(this.assessments.key(uid,s.learning.routeId));if(a?.conversationRoute){await this.ensure(uid,a.id);await this.reconcile(uid,a.id)}
  }
  async start(uid,input,verified){
-  if(!verified)throw fail('Confirma tu correo para practicar con IA.',403);if(!UUID.test(input.id||'')||!UUID.test(input.routeId||''))throw fail('Conversación no válida.');
+  if(!verified)throw fail('Confirma tu correo para practicar con IA.',403);await this.requirePractice?.(uid);if(!UUID.test(input.id||'')||!UUID.test(input.routeId||''))throw fail('Conversación no válida.');
   const {route}=await this.state(uid,input.routeId);if(!route?.current)throw fail('Esta es una ruta histórica. Continúa desde tu ruta actual.',409);
   const step=allSteps(route).find(s=>s.id===input.stepId);if(!step||step.status==='locked')throw fail('Aprueba el paso actual con 7,5/10 antes de avanzar.',409);
   // Existing request IDs reopen the same session. They never allocate another attempt.

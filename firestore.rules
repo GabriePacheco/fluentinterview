@@ -5,16 +5,27 @@ service cloud.firestore {
     function validProfile() {
       let d = request.resource.data;
       return d.keys().hasAll(['name','role','goal','minutes','experience','job','createdAt','updatedAt','schemaVersion'])
-        && d.keys().hasOnly(['name','role','goal','minutes','experience','job','createdAt','updatedAt','schemaVersion'])
+        && d.keys().hasOnly(['name','role','goal','minutes','experience','job','createdAt','updatedAt','schemaVersion','profession','targetRoles','selfReportedLevel','onboardingCompleted'])
         && d.name is string && d.name.size() > 0 && d.name.size() <= 60
         && d.role is string && d.role.size() <= 100
         && d.goal is string && d.goal.size() <= 200
         && d.minutes in ['10 minutos','20 minutos','30 minutos']
         && d.experience is string && d.experience.size() <= 3000
         && d.job is string && d.job.size() <= 6000
+        && (!('profession' in d) || (d.profession is string && d.profession.size() <= 120))
+        && (!('selfReportedLevel' in d) || d.selfReportedLevel in ['A1','A2','B1','B2','C1','C2','unsure'])
+        && (!('targetRoles' in d) || (d.targetRoles is list && d.targetRoles.size() <= 5
+          && (d.targetRoles.size() < 1 || validRole(d.targetRoles[0]))
+          && (d.targetRoles.size() < 2 || validRole(d.targetRoles[1]))
+          && (d.targetRoles.size() < 3 || validRole(d.targetRoles[2]))
+          && (d.targetRoles.size() < 4 || validRole(d.targetRoles[3]))
+          && (d.targetRoles.size() < 5 || validRole(d.targetRoles[4]))))
+        && (!('onboardingCompleted' in d) || (d.onboardingCompleted is bool
+          && (!d.onboardingCompleted || (d.profession.size() > 0 && d.targetRoles.size() > 0 && 'selfReportedLevel' in d))))
         && d.schemaVersion == 1
         && d.createdAt is timestamp && d.updatedAt == request.time;
     }
+    function validRole(value) { return value is string && value.size() > 0 && value.size() <= 100; }
     match /fi_users/{uid} {
       allow get: if owner(uid);
       allow list: if false;

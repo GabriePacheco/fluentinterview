@@ -1,5 +1,5 @@
 import {sourceQuote} from './evaluation-policy.mjs';
-import {INTERVIEW_COMPETENCIES,MIN_ROUTE_STAGES} from './interview-competencies.mjs';
+import {INTERVIEW_COMPETENCIES,MIN_ROUTE_STAGES,extendRouteModules} from './interview-competencies.mjs';
 const str={type:'string'},arr=items=>({type:'array',items}),obj=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 export const LEARNING_FOCUS={
  grammar:{title:'Construcción de oraciones y tiempos verbales',objective:'Construir oraciones completas y elegir los tiempos verbales adecuados al contexto.',exercise:'Revisa dos frases de tu respuesta. Explica una acción habitual, una pasada y una futura.',masteryCheck:'Producir tres oraciones nuevas con sujeto, verbo y tiempo coherentes con la situación.'},
@@ -35,8 +35,14 @@ export function expandDiagnosis(raw,input){
   if(!Object.hasOwn(LEARNING_FOCUS,key))throw Error('Objetivo no admitido.');
   if(['listening_details','reading_details'].includes(key)){const skill=input.scores?.skills?.[key==='listening_details'?'listening':'reading'];if(!skill||!skill.total||skill.correct>=skill.total)throw Error('La prioridad de comprensión no está respaldada por las tareas.');}
  }
- const modules=raw.modules.map(m=>({...m,...LEARNING_FOCUS[m.focus]}));
+ let modules=raw.modules.map(m=>({...m,...LEARNING_FOCUS[m.focus]}));
  if(modules.every(m=>INTERVIEW_COMPETENCIES[m.focus]))modules.sort((a,b)=>a.rank-b.rank);
+ // Complete a short model route from the learner's own quoted evidence. This
+ // deterministic extension keeps the free first route available and avoids a
+ // second paid model request just to reach the required seven competencies.
+ if(raw.level!=='insufficient_evidence'&&modules.length>0&&modules.length<MIN_ROUTE_STAGES){
+  modules=extendRouteModules({result:{...raw,modules},profile:input.profile});
+ }
  return {...raw,priorities:raw.priorities.map(key=>LEARNING_FOCUS[key].title),modules};
 }
 export function validateDiagnosis(result,samples){

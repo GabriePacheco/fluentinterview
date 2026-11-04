@@ -18,7 +18,7 @@ export function validatePayload(kind,payload){
  if(!payload||typeof payload!=='object'||Array.isArray(payload))throw invalid('Solicitud no válida.');
  const profile=payload.profile||{};
  if(typeof profile!=='object'||Array.isArray(profile))throw invalid('Perfil no válido.');
- const cleanProfile={};for(const key of ['name','role','goal','minutes','experience','job']){if(profile[key]!==undefined){if(typeof profile[key]!=='string'||profile[key].length>(['experience','job'].includes(key)?1200:200))throw invalid('Perfil demasiado largo.');cleanProfile[key]=profile[key]}}
+ const cleanProfile={};for(const key of ['name','role','profession','goal','minutes','experience','job']){if(profile[key]!==undefined){if(typeof profile[key]!=='string'||profile[key].length>(['experience','job'].includes(key)?1200:200))throw invalid('Perfil demasiado largo.');cleanProfile[key]=profile[key]}}
  if(kind==='conversation'){
    if(!Array.isArray(payload.messages)||payload.messages.length>12)throw invalid('La sesión admite hasta 12 mensajes.');
    const messages=payload.messages.map(m=>{if(!m||!['user','assistant'].includes(m.role)||typeof m.content!=='string'||m.content.length>1800)throw invalid('Mensaje no válido o demasiado largo.');return {role:m.role,content:m.content}});
